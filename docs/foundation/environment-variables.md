@@ -1,0 +1,47 @@
+# SummonAI Environment Variables
+
+本文件对应 M15，作为根目录 [`.env.example`](/D:/Summon-Ai/.env.example) 的说明文档。
+
+## 规则
+
+- 命名全部使用 `UPPER_SNAKE_CASE`
+- 前端可见变量必须使用 `NEXT_PUBLIC_` 前缀
+- 部署位置标记：
+  - `V` = Vercel
+  - `F` = Fly.io
+
+## 必填变量
+
+- `NEXT_PUBLIC_SUPABASE_URL` `[V+F]`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` `[V+F]`
+- `SUPABASE_SERVICE_ROLE_KEY` `[V+F]`
+- `BASE_RPC_URL` `[V]`
+- `NEXT_PUBLIC_PLATFORM_DEPOSIT_ADDRESS` `[V]`
+- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` `[V]`
+- `RESEND_API_KEY` `[V]`
+- `NEXT_PUBLIC_HCAPTCHA_SITEKEY` `[V]`
+- `HCAPTCHA_SECRET` `[V]`
+- `CRON_SECRET` `[V]`
+- `DATA_ENCRYPTION_MASTER_KEY` `[V]`
+- `UPSTASH_REDIS_REST_URL` `[V+F]`
+- `UPSTASH_REDIS_REST_TOKEN` `[V+F]`
+- `SUPABASE_JWT_SECRET` `[V+F]`
+- `RELAY_SECRET` `[V+F]`
+- `RELAY_INTERNAL_URL` `[V+F]`
+- `VERCEL_API_URL` `[F]`
+
+## 当前代码直接引用的环境变量
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SSE_URL`
+- `NEXT_PUBLIC_SENTRY_DSN`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+- `PORT`
+- `HEARTBEAT_INTERVAL_SECONDS`
+- `GRACEFUL_SHUTDOWN_TIMEOUT_MS`
+- `FLYIO_HEALTH_CHECK_PATH`
+
+说明：
+- `NEXT_RUNTIME` 是 Next.js 内部提供的运行时变量，不属于部署时手动配置项。
