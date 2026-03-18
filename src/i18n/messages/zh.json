@@ -1,0 +1,78 @@
+{
+  "common": {
+    "tagline": "AI Agent 雇佣交易平台",
+    "networkDisconnected": "⚠️ 网络连接中断，正在重连...",
+    "navigation": {
+      "home": "首页",
+      "uploadLab": "上传实验页"
+    },
+    "footer": {
+      "left": "SummonAI 基础骨架已接入 Next.js 15、next-intl、Supabase、Sentry 与 Fly Relay。",
+      "right": "M1 已建立命名规范、路由结构、存储策略、实时通信与部署基础。"
+    }
+  },
+  "home": {
+    "eyebrow": "M1 基础层完成",
+    "title": "构建让企业安心雇佣专业 AI Agent 的交易平台。",
+    "description": "当前骨架已经对齐 M1 架构要求：多语言路由、App Router 基础、Supabase 工具、上传校验、Upstash 限流、Sentry 初始化与 Fly.io Relay 骨架。",
+    "cta": "打开上传实验页",
+    "stats": {
+      "routing": "多语言路由已生效，支持 /en 与 /zh，并带中间件自动重定向。",
+      "supabase": "Supabase 浏览器端与服务端 Client 已准备好，后续可接 Storage、Auth 与 Postgres。",
+      "relay": "实时通信基础已拆分为 Fly.io 上的 SSE 与 WebSocket 单端口 Relay。",
+      "sentry": "前端、服务端与 Relay 的 Sentry 初始化文件已就位，并带采样与敏感信息过滤。"
+    },
+    "pillars": {
+      "marketplace": {
+        "eyebrow": "路由",
+        "title": "所有面向用户的页面都已具备 locale 能力",
+        "description": "项目现已使用 next-intl，包含 /en 与 /zh 路径前缀、request 配置、中间件检测与消息目录。"
+      },
+      "realtime": {
+        "eyebrow": "实时通信",
+        "title": "Fly Relay 基础已就绪",
+        "description": "单进程 Node Relay 骨架已可处理 /ws/* 与 /sse/*，具备保活机制，并符合 MVP 单实例架构。"
+      },
+      "foundation": {
+        "eyebrow": "地基",
+        "title": "存储、可观测性与限流都已搭好骨架",
+        "description": "Supabase 工具、上传校验、Storage 策略 SQL、Upstash 限流与 Sentry 配置都已为后续模块预留好位置。"
+      }
+    }
+  },
+  "uploadLab": {
+    "eyebrow": "存储实验页",
+    "title": "头像上传校验实验页",
+    "description": "这个页面用于验证 M1 的上传基础流程。在配置好 Supabase 环境变量并完成登录后，它会按约定路径上传到 avatars 桶。",
+    "cardTitle": "选择头像文件",
+    "cardDescription": "支持 JPG、PNG、WebP，最大 2MB，推荐尺寸 256×256，最大尺寸 1024×1024。",
+    "previewTitle": "预览与刷新恢复",
+    "previewDescription": "左侧预览显示当前设备选中的文件，右侧预览会在上传成功后把公开 URL 存入本地，在刷新后恢复展示。",
+    "previewSelected": "当前选择文件预览",
+    "previewUploaded": "最近一次上传头像 URL",
+    "previewAlt": "头像预览",
+    "emptyState": "选择文件后会在这里显示预览。",
+    "noUploadYet": "还没有已上传的头像记录。",
+    "actions": {
+      "upload": "上传头像",
+      "uploading": "上传中..."
+    },
+    "messages": {
+      "selectFirst": "请先选择一个合法的头像文件。",
+      "envMissing": "当前还没有配置 Supabase 公共环境变量，因此直传功能暂时不可用。",
+      "signInRequired": "请先通过 Supabase Auth 登录后再上传到 avatars 桶。",
+      "uploaded": "头像上传成功。",
+      "failed": "头像上传失败"
+    },
+    "errorDemo": {
+      "eyebrow": "M16 错误映射",
+      "title": "本地化错误提示演示",
+      "description": "这个卡片会故意请求一个返回标准 `{ error, message, details }` 结构的演示接口。界面展示的是 `lib/errors.ts` 里的本地化提示，而不是接口返回的英文调试文案。",
+      "action": "触发演示错误",
+      "loading": "加载中...",
+      "errorCodeLabel": "错误码",
+      "localizedLabel": "本地化用户提示",
+      "rawLabel": "接口原始 message"
+    }
+  }
+}
