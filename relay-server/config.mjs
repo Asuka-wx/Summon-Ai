@@ -1,0 +1,17 @@
+export const relayConfig = {
+  port: Number(process.env.PORT ?? 8080),
+  healthCheckPath: process.env.FLYIO_HEALTH_CHECK_PATH ?? "/health",
+  gracefulShutdownTimeoutMs: Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? 5000),
+  heartbeatIntervalSeconds: Number(process.env.HEARTBEAT_INTERVAL_SECONDS ?? 15),
+  heartbeatMissThreshold: Number(process.env.HEARTBEAT_MISS_THRESHOLD ?? 2),
+  sdkMinVersion: process.env.SDK_MIN_VERSION ?? "1.0.0",
+  relaySecret: process.env.RELAY_SECRET ?? "",
+  cronSecret: process.env.CRON_SECRET ?? "",
+  vercelApiUrl: process.env.VERCEL_API_URL ?? "http://127.0.0.1:3000/api",
+  wsMaxConnectionsPerIp: Number(process.env.WS_MAX_CONNECTIONS_PER_IP ?? 5),
+  sseRetryMs: 3000,
+  maxMessagesPerMinute: 200,
+  settlementConfirmBatchSize: Number(process.env.SETTLEMENT_CONFIRM_BATCH_SIZE ?? 20),
+  healthRecalcBatchSize: Number(process.env.HEALTH_RECALC_BATCH_SIZE ?? 50),
+  retiringMaxDays: Number(process.env.RETIRING_MAX_DAYS ?? 7),
+};
