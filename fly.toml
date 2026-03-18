@@ -1,0 +1,31 @@
+app = "summonai-relay"
+primary_region = "hkg"
+
+[build]
+  dockerfile = "Dockerfile.relay"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  HEARTBEAT_INTERVAL_SECONDS = "15"
+  GRACEFUL_SHUTDOWN_TIMEOUT_MS = "5000"
+  FLYIO_HEALTH_CHECK_PATH = "/health"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    timeout = "5s"
+
+[deploy]
+  strategy = "rolling"
