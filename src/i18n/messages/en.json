@@ -1,0 +1,78 @@
+{
+  "common": {
+    "tagline": "AI agent hiring marketplace",
+    "networkDisconnected": "⚠️ Network connection interrupted. Reconnecting...",
+    "navigation": {
+      "home": "Home",
+      "uploadLab": "Upload Lab"
+    },
+    "footer": {
+      "left": "SummonAI foundation scaffold with Next.js 15, next-intl, Supabase, Sentry and Fly relay.",
+      "right": "M1 establishes naming, routing, storage, realtime and deployment groundwork."
+    }
+  },
+  "home": {
+    "eyebrow": "M1 foundation complete",
+    "title": "Build the marketplace where companies hire specialized AI agents.",
+    "description": "This starter now follows the M1 architecture: locale routing, App Router foundation, Supabase utilities, upload helpers, Upstash ratelimits, Sentry bootstrap and a Fly.io relay skeleton.",
+    "cta": "Open upload lab",
+    "stats": {
+      "routing": "Locale-first routing is live at /en and /zh with middleware redirects.",
+      "supabase": "Supabase browser and server clients are prepared for Storage, Auth and Postgres modules.",
+      "relay": "Realtime foundations are split for SSE and WebSocket traffic via Fly.io on port 8080.",
+      "sentry": "Client, server and relay Sentry initialization files are in place with sampling and scrubbing."
+    },
+    "pillars": {
+      "marketplace": {
+        "eyebrow": "Routing",
+        "title": "All user-facing pages are locale-ready",
+        "description": "The project now uses next-intl with /en and /zh path prefixes, request config, middleware detection and message catalogs."
+      },
+      "realtime": {
+        "eyebrow": "Realtime",
+        "title": "Fly relay groundwork is ready",
+        "description": "A single-process Node relay skeleton handles /ws/* and /sse/*, keeps clients alive and matches the MVP single-instance architecture."
+      },
+      "foundation": {
+        "eyebrow": "Foundation",
+        "title": "Storage, observability and rate limiting are scaffolded",
+        "description": "Supabase helpers, upload validation, Storage policy SQL, Upstash ratelimits and Sentry config are all prepared for downstream modules."
+      }
+    }
+  },
+  "uploadLab": {
+    "eyebrow": "Storage lab",
+    "title": "Avatar upload validation lab",
+    "description": "This page exercises the M1 upload helper flow. With Supabase env vars and an authenticated user, it uploads to the avatars bucket using the required deterministic path.",
+    "cardTitle": "Choose an avatar",
+    "cardDescription": "Accepted formats: JPG, PNG, WebP. Max size 2MB. Recommended 256×256. Max 1024×1024.",
+    "previewTitle": "Preview and persistence",
+    "previewDescription": "The left preview shows the file selected on this device. The right preview restores the last uploaded public URL from local storage after a refresh.",
+    "previewSelected": "Selected file preview",
+    "previewUploaded": "Last uploaded avatar URL",
+    "previewAlt": "Avatar preview",
+    "emptyState": "Choose a file to preview it.",
+    "noUploadYet": "No uploaded avatar stored yet.",
+    "actions": {
+      "upload": "Upload avatar",
+      "uploading": "Uploading..."
+    },
+    "messages": {
+      "selectFirst": "Select a valid avatar image before uploading.",
+      "envMissing": "Supabase public environment variables are not configured yet, so direct upload is currently disabled.",
+      "signInRequired": "Sign in with Supabase Auth before uploading to the avatars bucket.",
+      "uploaded": "Avatar uploaded successfully.",
+      "failed": "Avatar upload failed"
+    },
+    "errorDemo": {
+      "eyebrow": "M16 error mapping",
+      "title": "Localized error message demo",
+      "description": "This card intentionally hits a demo API route that returns standardized `{ error, message, details }` payloads. The UI displays the localized error message from `lib/errors.ts`, not the raw English debug message.",
+      "action": "Trigger demo error",
+      "loading": "Loading...",
+      "errorCodeLabel": "Error code",
+      "localizedLabel": "Localized user message",
+      "rawLabel": "Raw API message"
+    }
+  }
+}
