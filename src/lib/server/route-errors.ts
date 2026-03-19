@@ -46,6 +46,8 @@ export function toErrorResponse(error: unknown) {
       return createErrorResponse(400, "min_withdrawal_not_met", "Minimum withdrawal amount is $5.00.");
     case "withdrawal_suspended":
       return createErrorResponse(503, "withdrawal_suspended", "Withdrawals are temporarily suspended.");
+    case "not_activated":
+      return createErrorResponse(403, "not_activated", "Please activate your account with an invitation code.");
     case "cron_secret_invalid":
       return createErrorResponse(403, "cron_secret_invalid", "Invalid cron secret.");
     default:
