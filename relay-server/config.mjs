@@ -1,5 +1,6 @@
 export const relayConfig = {
   port: Number(process.env.PORT ?? 8080),
+  broadcastWindowSeconds: 20,
   healthCheckPath: process.env.FLYIO_HEALTH_CHECK_PATH ?? "/health",
   gracefulShutdownTimeoutMs: Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? 5000),
   heartbeatIntervalSeconds: Number(process.env.HEARTBEAT_INTERVAL_SECONDS ?? 15),
