@@ -1,6 +1,73 @@
 import { WebSocketServer } from "ws";
 
 import { relayConfig } from "./config.mjs";
+import { postToVercel } from "./vercel-api.mjs";
+
+export async function processSdkMessage(parsed, context) {
+  const { relayState, socket, agentId } = context;
+
+  if (parsed.type === "heartbeat") {
+    relayState.incrementOnlineSeconds(agentId, relayConfig.heartbeatIntervalSeconds);
+    socket?.send?.(JSON.stringify({ type: "heartbeat_ack", data: {}, ts: Date.now() }));
+    return { kind: "heartbeat" };
+  }
+
+  if (parsed.type === "disconnect") {
+    socket?.close?.(1000, "Normal closure.");
+    return { kind: "disconnect" };
+  }
+
+  if (parsed.type === "maintenance_probe") {
+    socket?.close?.(4007, "Server maintenance.");
+    return { kind: "maintenance_probe" };
+  }
+
+  if (parsed.type === "bid") {
+    await postToVercel(`v1/broadcasts/${parsed.data.broadcastId}/bids`, {
+      agentId,
+      confidence: parsed.data.confidence,
+      pitch: parsed.data.pitch,
+      response_time_ms: Math.max(0, Date.now() - (parsed.ts ?? Date.now())),
+    });
+
+    return { kind: "bid" };
+  }
+
+  if (parsed.type === "stream_chunk") {
+    relayState.appendStreamChunk(parsed.data.taskId, parsed.data.content);
+    relayState.broadcastToTask(parsed.data.taskId, "agent:chunk", {
+      taskId: parsed.data.taskId,
+      content: parsed.data.content,
+    });
+    return { kind: "stream_chunk" };
+  }
+
+  if (parsed.type === "stream_done") {
+    const bufferedContent = relayState.consumeStreamBuffer(parsed.data.taskId);
+
+    const roundResult = await postToVercel(
+      `v1/tasks/${parsed.data.taskId}/rounds/complete`,
+      {
+        roundNumber: parsed.data.roundNumber,
+        content: bufferedContent,
+      },
+    );
+
+    return {
+      kind: "stream_done",
+      roundResult,
+    };
+  }
+
+  if (parsed.type === "status_update") {
+    return {
+      kind: "status_update",
+      status: parsed.data.status,
+    };
+  }
+
+  return { kind: "unknown" };
+}
 
 export function createWSRelay(relayState, auth, getIsShuttingDown) {
   const wss = new WebSocketServer({ noServer: true });
@@ -17,7 +84,9 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
       request.socket.remoteAddress ??
       "unknown";
 
-    if (!sdkApiKey || sdkApiKey === "invalid") {
+    try {
+      await auth.verifyWsApiKey(sdkApiKey);
+    } catch {
       socket.close(4001, "Authentication failed.");
       return;
     }
@@ -40,7 +109,10 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
       return;
     }
 
-    if (relayState.getAgentSocket(agentId) || relayState.getIpConnectionCount(clientIp) >= relayConfig.wsMaxConnectionsPerIp) {
+    if (
+      relayState.getAgentSocket(agentId) ||
+      relayState.getIpConnectionCount(clientIp) >= relayConfig.wsMaxConnectionsPerIp
+    ) {
       socket.close(4005, "Connection limit exceeded.");
       return;
     }
@@ -51,6 +123,14 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
     }
 
     relayState.registerAgentSocket(agentId, clientIp, socket);
+    let currentTaskId = null;
+    let currentRoundNumber = null;
+    let hasChunksInCurrentRound = false;
+
+    const queuedMessages = relayState.drainAgentQueue(agentId);
+    queuedMessages.forEach((message) => {
+      socket.send(JSON.stringify(message));
+    });
 
     let lastHeartbeatAt = Date.now();
     let messageTimestamps = [];
@@ -67,12 +147,12 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
     socket.send(
       JSON.stringify({
         type: "ready",
-        agent_id: agentId,
+        data: { agentId },
         ts: Date.now(),
       }),
     );
 
-    socket.on("message", (payload) => {
+    socket.on("message", async (payload) => {
       try {
         const parsed = JSON.parse(payload.toString());
         const now = Date.now();
@@ -87,29 +167,24 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
 
         if (parsed.type === "heartbeat") {
           lastHeartbeatAt = now;
-          relayState.incrementOnlineSeconds(agentId, relayConfig.heartbeatIntervalSeconds);
-          socket.send(JSON.stringify({ type: "heartbeat_ack", ts: now }));
-          return;
         }
 
-        if (parsed.type === "disconnect") {
-          socket.close(1000, "Normal closure.");
-          return;
+        if (parsed.type === "stream_chunk") {
+          currentTaskId = parsed.data.taskId;
+          hasChunksInCurrentRound = true;
         }
 
-        if (parsed.type === "maintenance_probe") {
-          socket.close(4007, "Server maintenance.");
-          return;
+        if (parsed.type === "stream_done") {
+          currentTaskId = parsed.data.taskId;
+          currentRoundNumber = parsed.data.roundNumber;
+          hasChunksInCurrentRound = false;
         }
 
-        if (parsed.task_id && parsed.type === "stream_chunk") {
-          relayState.broadcastToTask(parsed.task_id, "agent:chunk", parsed);
-          return;
-        }
-
-        if (parsed.user_id && parsed.type === "sync_notification") {
-          relayState.broadcastToUser(parsed.user_id, "sync:notification", parsed);
-        }
+        await processSdkMessage(parsed, {
+          relayState,
+          socket,
+          agentId,
+        });
       } catch {
         socket.send(JSON.stringify({ type: "error", code: "validation_error" }));
       }
@@ -117,6 +192,21 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
 
     socket.on("close", () => {
       clearInterval(heartbeatWatcher);
+
+      if (currentTaskId && hasChunksInCurrentRound) {
+        relayState.broadcastToTask(currentTaskId, "agent:fault", {
+          task_id: currentTaskId,
+          round_number: currentRoundNumber ?? undefined,
+          fault_type: "mid_reply_disconnect",
+          message: "Agent 回复中断开，该轮不计费",
+        });
+      } else if (currentTaskId) {
+        relayState.broadcastToTask(currentTaskId, "agent:disconnect", {
+          task_id: currentTaskId,
+          grace_seconds: Number(process.env.DISCONNECT_GRACE_SECONDS ?? 60),
+        });
+      }
+
       relayState.unregisterAgentSocket(agentId, clientIp, socket);
     });
 

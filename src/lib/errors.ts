@@ -37,6 +37,7 @@ export const API_ERROR_CODES = [
   "captcha_required",
   "platform_at_capacity",
   "withdrawal_suspended",
+  "tx_already_processed",
 ] as const;
 
 export type ErrorCode = (typeof API_ERROR_CODES)[number];
