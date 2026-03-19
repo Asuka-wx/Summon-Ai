@@ -44,8 +44,16 @@ const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
 
   if (url.pathname === relayConfig.healthCheckPath) {
-    response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-    response.end("ok");
+    const memoryUsageMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+    response.end(
+      JSON.stringify({
+        status: "ok",
+        activeConnections: relayState.getRelayStats().activeConnections,
+        uptime: relayState.getRelayStats().uptimeSeconds,
+        memoryUsageMB,
+      }),
+    );
     return;
   }
 

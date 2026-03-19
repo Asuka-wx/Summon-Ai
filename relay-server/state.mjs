@@ -1,4 +1,5 @@
 export function createRelayState() {
+  const startedAt = Date.now();
   const activeWSConnections = new Set();
   const activeSSEConnections = new Set();
   const agentSockets = new Map();
@@ -6,6 +7,9 @@ export function createRelayState() {
   const taskSSEConnections = new Map();
   const ipConnectionCounts = new Map();
   const onlineAccumulator = new Map();
+  const pendingAgentQueues = new Map();
+  const streamBuffers = new Map();
+  const broadcastWindowTimers = new Map();
 
   function registerAgentSocket(agentId, clientIp, socket) {
     agentSockets.set(agentId, socket);
@@ -30,6 +34,21 @@ export function createRelayState() {
 
   function getAgentSocket(agentId) {
     return agentSockets.get(agentId);
+  }
+
+  function enqueueAgentMessage(agentId, message) {
+    const queue = pendingAgentQueues.get(agentId) ?? [];
+    queue.push({
+      ...message,
+      queued_at: Date.now(),
+    });
+    pendingAgentQueues.set(agentId, queue);
+  }
+
+  function drainAgentQueue(agentId) {
+    const queue = pendingAgentQueues.get(agentId) ?? [];
+    pendingAgentQueues.delete(agentId);
+    return queue;
   }
 
   function getIpConnectionCount(clientIp) {
@@ -118,6 +137,30 @@ export function createRelayState() {
     onlineAccumulator.set(agentId, (onlineAccumulator.get(agentId) ?? 0) + seconds);
   }
 
+  function appendStreamChunk(taskId, content) {
+    streamBuffers.set(taskId, `${streamBuffers.get(taskId) ?? ""}${content}`);
+  }
+
+  function consumeStreamBuffer(taskId) {
+    const content = streamBuffers.get(taskId) ?? "";
+    streamBuffers.delete(taskId);
+    return content;
+  }
+
+  function scheduleBroadcastWindowClose(broadcastId, callback, delayMs) {
+    const existingTimer = broadcastWindowTimers.get(broadcastId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      broadcastWindowTimers.delete(broadcastId);
+      callback();
+    }, delayMs);
+
+    broadcastWindowTimers.set(broadcastId, timer);
+  }
+
   function flushOnlineAccumulatorEntries() {
     const entries = Array.from(onlineAccumulator.entries());
     onlineAccumulator.clear();
@@ -128,9 +171,11 @@ export function createRelayState() {
     return {
       wsConnections: activeWSConnections.size,
       sseConnections: activeSSEConnections.size,
+      activeConnections: activeWSConnections.size + activeSSEConnections.size,
       connectedAgents: agentSockets.size,
       trackedUsers: userSSEConnections.size,
       trackedTasks: taskSSEConnections.size,
+      uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
     };
   }
 
@@ -145,6 +190,11 @@ export function createRelayState() {
     broadcastToUser,
     broadcastToTask,
     incrementOnlineSeconds,
+    enqueueAgentMessage,
+    drainAgentQueue,
+    appendStreamChunk,
+    consumeStreamBuffer,
+    scheduleBroadcastWindowClose,
     flushOnlineAccumulatorEntries,
     getRelayStats,
     activeWSConnections,
