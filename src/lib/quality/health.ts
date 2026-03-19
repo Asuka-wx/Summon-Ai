@@ -75,83 +75,83 @@ export function getQualityMultiplier(qualityStatus: QualityStatus) {
   }
 }
 
+export function hasQualityWarningTrigger({
+  healthScore,
+  failureRate,
+  warnThreshold,
+  failureRateThreshold,
+}: {
+  healthScore: number;
+  failureRate: number;
+  warnThreshold: number;
+  failureRateThreshold: number;
+}) {
+  return healthScore < warnThreshold || failureRate > failureRateThreshold;
+}
+
 export function resolveNextQualityStatus({
   currentStatus,
   healthScore,
-  observationWeeks,
-  observedTaskCount,
-  downgradeWeeks,
-  downgradeMinTasks,
-  downgradeHealthThreshold,
-  upgradeWeeksHiddenToDemoted,
-  upgradeWeeksDemotedToWarned,
-  upgradeWeeksWarnedToNormal,
-  upgradeMinTasks,
-  upgradeHealthThreshold,
+  failureRate,
+  weeksSinceChange,
+  tasksSinceChange,
+  warnThreshold,
+  failureRateThreshold,
+  observeWeeks,
+  minTasks,
+  recoveryWeeks,
+  recoveryThreshold,
 }: {
   currentStatus: QualityStatus;
   healthScore: number;
-  observationWeeks: number;
-  observedTaskCount: number;
-  downgradeWeeks: number;
-  downgradeMinTasks: number;
-  downgradeHealthThreshold: number;
-  upgradeWeeksHiddenToDemoted: number;
-  upgradeWeeksDemotedToWarned: number;
-  upgradeWeeksWarnedToNormal: number;
-  upgradeMinTasks: number;
-  upgradeHealthThreshold: number;
+  failureRate: number;
+  weeksSinceChange: number;
+  tasksSinceChange: number;
+  warnThreshold: number;
+  failureRateThreshold: number;
+  observeWeeks: number;
+  minTasks: number;
+  recoveryWeeks: number;
+  recoveryThreshold: number;
 }) {
-  const canDowngrade =
-    observationWeeks >= downgradeWeeks &&
-    observedTaskCount >= downgradeMinTasks &&
-    healthScore < downgradeHealthThreshold;
-  const canUpgrade =
-    observedTaskCount >= upgradeMinTasks && healthScore >= upgradeHealthThreshold;
+  const warningTriggered = hasQualityWarningTrigger({
+    healthScore,
+    failureRate,
+    warnThreshold,
+    failureRateThreshold,
+  });
+  const canChangeByObservation =
+    weeksSinceChange >= observeWeeks && tasksSinceChange >= minTasks;
+  const canRecover =
+    weeksSinceChange >= recoveryWeeks &&
+    tasksSinceChange >= minTasks &&
+    healthScore >= recoveryThreshold;
 
-  if (currentStatus === "normal" && canDowngrade) {
+  if (currentStatus === "normal" && warningTriggered) {
     return "warned";
   }
 
   if (currentStatus === "warned") {
-    if (
-      canUpgrade &&
-      observationWeeks >= upgradeWeeksWarnedToNormal
-    ) {
-      return "normal";
+    if (warningTriggered && canChangeByObservation) {
+      return "demoted";
     }
 
-    if (canDowngrade) {
-      return "demoted";
+    if (!warningTriggered && canRecover) {
+      return "normal";
     }
   }
 
   if (currentStatus === "demoted") {
-    if (
-      canUpgrade &&
-      observationWeeks >= upgradeWeeksDemotedToWarned
-    ) {
-      return "warned";
-    }
-
-    if (canDowngrade) {
+    if (warningTriggered && canChangeByObservation) {
       return "hidden";
     }
+
+    if (!warningTriggered && canRecover) {
+      return "warned";
+    }
   }
 
-  if (
-    currentStatus === "hidden" &&
-    canUpgrade &&
-    observationWeeks >= upgradeWeeksHiddenToDemoted
-  ) {
-    return "demoted";
-  }
-
-  if (
-    currentStatus === "recovery_pending" &&
-    canUpgrade &&
-    observationWeeks >= 4
-  ) {
+  if (currentStatus === "hidden" && canRecover) {
     return "demoted";
   }
 

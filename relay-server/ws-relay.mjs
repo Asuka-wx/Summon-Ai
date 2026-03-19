@@ -1,13 +1,51 @@
 import { WebSocketServer } from "ws";
 
 import { relayConfig } from "./config.mjs";
+import { getRelaySupabaseAdminClient } from "./supabase.mjs";
 import { postToVercel } from "./vercel-api.mjs";
+
+async function updateAgentRuntimeState(agentId, updates) {
+  const supabase = getRelaySupabaseAdminClient();
+
+  if (!supabase) {
+    return;
+  }
+
+  await supabase
+    .from("agents")
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", agentId);
+}
+
+async function markAgentDisconnected(agentId) {
+  const supabase = getRelaySupabaseAdminClient();
+
+  if (!supabase) {
+    return;
+  }
+
+  await supabase
+    .from("agents")
+    .update({
+      status: "offline",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", agentId)
+    .not("status", "in", "(retiring,archived)");
+}
 
 export async function processSdkMessage(parsed, context) {
   const { relayState, socket, agentId } = context;
 
   if (parsed.type === "heartbeat") {
     relayState.incrementOnlineSeconds(agentId, relayConfig.heartbeatIntervalSeconds);
+    relayState.markAgentHeartbeat(agentId);
+    await updateAgentRuntimeState(agentId, {
+      sdk_last_heartbeat: new Date().toISOString(),
+    }).catch(() => {});
     socket?.send?.(JSON.stringify({ type: "heartbeat_ack", data: {}, ts: Date.now() }));
     return { kind: "heartbeat" };
   }
@@ -23,6 +61,11 @@ export async function processSdkMessage(parsed, context) {
   }
 
   if (parsed.type === "bid") {
+    if (typeof parsed.data.broadcastId === "string" && parsed.data.broadcastId.startsWith("test-")) {
+      relayState.markSellerTestSignal(parsed.data.broadcastId.slice(5), "self_eval");
+      return { kind: "test_bid" };
+    }
+
     await postToVercel(`v1/broadcasts/${parsed.data.broadcastId}/bids`, {
       agentId,
       confidence: parsed.data.confidence,
@@ -35,6 +78,7 @@ export async function processSdkMessage(parsed, context) {
 
   if (parsed.type === "stream_chunk") {
     relayState.appendStreamChunk(parsed.data.taskId, parsed.data.content);
+    relayState.markSellerTestSignal(parsed.data.taskId, "streaming");
     relayState.broadcastToTask(parsed.data.taskId, "agent:chunk", {
       taskId: parsed.data.taskId,
       content: parsed.data.content,
@@ -44,6 +88,7 @@ export async function processSdkMessage(parsed, context) {
 
   if (parsed.type === "stream_done") {
     const bufferedContent = relayState.consumeStreamBuffer(parsed.data.taskId);
+    relayState.markSellerTestSignal(parsed.data.taskId, "done_signal");
 
     const roundResult = await postToVercel(
       `v1/tasks/${parsed.data.taskId}/rounds/complete`,
@@ -60,6 +105,10 @@ export async function processSdkMessage(parsed, context) {
   }
 
   if (parsed.type === "status_update") {
+    await updateAgentRuntimeState(agentId, {
+      status: parsed.data.status,
+      sdk_last_heartbeat: new Date().toISOString(),
+    }).catch(() => {});
     return {
       kind: "status_update",
       status: parsed.data.status,
@@ -72,7 +121,7 @@ export async function processSdkMessage(parsed, context) {
 export function createWSRelay(relayState, auth, getIsShuttingDown) {
   const wss = new WebSocketServer({ noServer: true });
 
-  wss.on("connection", (socket, request) => {
+  wss.on("connection", async (socket, request) => {
     const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
     const sdkApiKey = url.searchParams.get("sdk_api_key");
     const integrityHash = url.searchParams.get("integrity_hash") ?? "";
@@ -122,7 +171,16 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
       return;
     }
 
+    if (relayState.isMaintenanceMode()) {
+      socket.close(4007, "Server maintenance.");
+      return;
+    }
+
     relayState.registerAgentSocket(agentId, clientIp, socket);
+    await updateAgentRuntimeState(agentId, {
+      sdk_version: sdkVersion,
+      sdk_last_heartbeat: new Date().toISOString(),
+    }).catch(() => {});
     let currentTaskId = null;
     let currentRoundNumber = null;
     let hasChunksInCurrentRound = false;
@@ -208,11 +266,13 @@ export function createWSRelay(relayState, auth, getIsShuttingDown) {
       }
 
       relayState.unregisterAgentSocket(agentId, clientIp, socket);
+      void markAgentDisconnected(agentId);
     });
 
     socket.on("error", () => {
       clearInterval(heartbeatWatcher);
       relayState.unregisterAgentSocket(agentId, clientIp, socket);
+      void markAgentDisconnected(agentId);
     });
   });
 

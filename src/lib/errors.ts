@@ -6,6 +6,7 @@ export const API_ERROR_CODES = [
   "min_withdrawal_not_met",
   "agent_offline",
   "agent_busy",
+  "agent_unavailable",
   "invalid_task_state",
   "seed_already_used",
   "seed_exhausted",
@@ -86,13 +87,17 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
     en: "This Agent is currently busy. Please try again later.",
     zh: "该 Agent 当前繁忙，请稍后再试。",
   },
+  agent_unavailable: {
+    en: "This Agent is currently unavailable.",
+    zh: "该 Agent 当前不可用。",
+  },
   invalid_task_state: {
     en: "This action is not available for the current task status.",
     zh: "当前任务状态不支持此操作。",
   },
   seed_already_used: {
     en: "You have already used a free trial with this Agent.",
-    zh: "您已使用过该 Agent 的免费体验。",
+    zh: "你已经使用过该 Agent 的免费体验。",
   },
   seed_exhausted: {
     en: "This Agent has no free trial slots available.",
@@ -112,7 +117,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
   },
   account_frozen: {
     en: "Your account has been frozen. Please contact support.",
-    zh: "您的账户已被冻结，请联系客服。",
+    zh: "你的账户已被冻结，请联系支持团队。",
   },
   broadcast_expired: {
     en: "This broadcast has expired.",
@@ -140,7 +145,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
   },
   ip_not_allowed: {
     en: "Access denied from this IP address.",
-    zh: "该 IP 地址无权访问。",
+    zh: "当前 IP 地址无权访问。",
   },
   cron_secret_invalid: {
     en: "Invalid cron secret.",
@@ -148,11 +153,11 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
   },
   not_task_owner: {
     en: "You do not have permission to manage this task.",
-    zh: "您无权操作此任务。",
+    zh: "你无权操作该任务。",
   },
   not_agent_owner: {
     en: "You do not have permission to manage this Agent.",
-    zh: "您无权操作此 Agent。",
+    zh: "你无权操作该 Agent。",
   },
   not_found: {
     en: "Resource not found.",
@@ -172,7 +177,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
   },
   slot_unavailable: {
     en: "This Agent is currently at capacity. Please try again later.",
-    zh: "该 Agent 已满负荷，请稍后再试。",
+    zh: "该 Agent 当前已满载，请稍后再试。",
   },
   tx_already_processed: {
     en: "This transaction has already been processed.",
@@ -180,15 +185,15 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
   },
   already_rated: {
     en: "You have already rated this task.",
-    zh: "您已评价过此任务。",
+    zh: "你已经评价过该任务。",
   },
   already_following: {
     en: "You are already following.",
-    zh: "您已关注。",
+    zh: "你已经关注过了。",
   },
   broadcast_already_selected: {
     en: "An Agent has already been selected for this broadcast.",
-    zh: "该广播已选择了 Agent。",
+    zh: "该广播已选择 Agent。",
   },
   conversation_expired: {
     en: "Conversation has expired and been deleted.",
@@ -200,39 +205,39 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
   },
   captcha_required: {
     en: "Please complete the verification.",
-    zh: "请完成人机验证。",
+    zh: "请完成验证。",
   },
   platform_at_capacity: {
     en: "Platform is at capacity. Please try again later.",
-    zh: "平台已达并发上限，请稍后再试。",
+    zh: "平台繁忙，请稍后再试。",
   },
   withdrawal_suspended: {
     en: "Withdrawals are temporarily suspended.",
-    zh: "提现功能暂时维护中。",
+    zh: "提现功能暂时关闭。",
   },
   not_activated: {
     en: "Please activate your account with an invitation code.",
-    zh: "请先使用激活码激活你的账户。",
+    zh: "请先使用邀请码激活账户。",
   },
   code_not_found: {
     en: "Invalid invitation code. Please check and try again.",
-    zh: "激活码无效，请检查后重试。",
+    zh: "邀请码无效，请检查后重试。",
   },
   code_deactivated: {
     en: "This invitation code has been deactivated.",
-    zh: "该激活码已被停用。",
+    zh: "该邀请码已被停用。",
   },
   code_expired: {
     en: "This invitation code has expired.",
-    zh: "该激活码已过期。",
+    zh: "该邀请码已过期。",
   },
   code_exhausted: {
     en: "This invitation code has reached its usage limit.",
-    zh: "该激活码已达到使用上限。",
+    zh: "该邀请码已达到使用上限。",
   },
   already_used: {
     en: "You have already used this invitation code.",
-    zh: "你已经使用过这个激活码。",
+    zh: "你已经使用过这个邀请码。",
   },
 };
 
