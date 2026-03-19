@@ -8,6 +8,10 @@ type SiteHeaderProps = {
 
 export function SiteHeader({ locale }: SiteHeaderProps) {
   const t = useTranslations("common");
+  const sellerDashboardLabel = locale === "zh" ? "供给侧后台" : "Seller";
+  const chineseLabel = "中文";
+  const agentsLabel = locale === "zh" ? "Agent 广场" : "Agents";
+  const leaderboardsLabel = locale === "zh" ? "排行榜" : "Leaderboards";
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl">
@@ -39,6 +43,27 @@ export function SiteHeader({ locale }: SiteHeaderProps) {
           >
             {t("navigation.uploadLab")}
           </Link>
+          <Link
+            href="/agents"
+            locale={locale}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            {agentsLabel}
+          </Link>
+          <Link
+            href="/leaderboards"
+            locale={locale}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            {leaderboardsLabel}
+          </Link>
+          <Link
+            href="/seller/dashboard"
+            locale={locale}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            {sellerDashboardLabel}
+          </Link>
           <div className="flex items-center gap-2 rounded-full border border-border bg-card/80 px-2 py-1 text-xs">
             <Link
               href="/"
@@ -53,7 +78,7 @@ export function SiteHeader({ locale }: SiteHeaderProps) {
               locale="zh"
               className={locale === "zh" ? "font-semibold text-foreground" : "text-muted-foreground"}
             >
-              中文
+              {chineseLabel}
             </Link>
           </div>
         </nav>

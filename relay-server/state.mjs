@@ -7,14 +7,18 @@ export function createRelayState() {
   const taskSSEConnections = new Map();
   const ipConnectionCounts = new Map();
   const onlineAccumulator = new Map();
+  const agentLastHeartbeatAt = new Map();
   const pendingAgentQueues = new Map();
   const streamBuffers = new Map();
   const broadcastWindowTimers = new Map();
+  const sellerTestSessions = new Map();
+  let maintenanceMode = false;
 
   function registerAgentSocket(agentId, clientIp, socket) {
     agentSockets.set(agentId, socket);
     activeWSConnections.add(socket);
     ipConnectionCounts.set(clientIp, (ipConnectionCounts.get(clientIp) ?? 0) + 1);
+    agentLastHeartbeatAt.set(agentId, Date.now());
   }
 
   function unregisterAgentSocket(agentId, clientIp, socket) {
@@ -22,6 +26,10 @@ export function createRelayState() {
 
     if (agentSockets.get(agentId) === socket) {
       agentSockets.delete(agentId);
+    }
+
+    if (!agentSockets.has(agentId)) {
+      agentLastHeartbeatAt.delete(agentId);
     }
 
     const nextIpCount = Math.max((ipConnectionCounts.get(clientIp) ?? 1) - 1, 0);
@@ -137,6 +145,17 @@ export function createRelayState() {
     onlineAccumulator.set(agentId, (onlineAccumulator.get(agentId) ?? 0) + seconds);
   }
 
+  function markAgentHeartbeat(agentId) {
+    agentLastHeartbeatAt.set(agentId, Date.now());
+
+    for (const session of sellerTestSessions.values()) {
+      if (session.agentId === agentId) {
+        session.results.heartbeat = true;
+        session.updatedAt = Date.now();
+      }
+    }
+  }
+
   function appendStreamChunk(taskId, content) {
     streamBuffers.set(taskId, `${streamBuffers.get(taskId) ?? ""}${content}`);
   }
@@ -145,6 +164,62 @@ export function createRelayState() {
     const content = streamBuffers.get(taskId) ?? "";
     streamBuffers.delete(taskId);
     return content;
+  }
+
+  function startSellerTestSession({ taskId, agentId }) {
+    const now = Date.now();
+    const existing = sellerTestSessions.get(taskId);
+    const session = existing ?? {
+      taskId,
+      agentId,
+      startedAt: now,
+      updatedAt: now,
+      results: {
+        self_eval: false,
+        streaming: false,
+        done_signal: false,
+        heartbeat: false,
+      },
+    };
+
+    session.agentId = agentId;
+    session.startedAt = existing?.startedAt ?? now;
+    session.updatedAt = now;
+    session.results = {
+      self_eval: false,
+      streaming: false,
+      done_signal: false,
+      heartbeat:
+        agentSockets.has(agentId) ||
+        now - (agentLastHeartbeatAt.get(agentId) ?? 0) <= 2 * 60 * 1000,
+    };
+    sellerTestSessions.set(taskId, session);
+    return session;
+  }
+
+  function markSellerTestSignal(taskId, signal) {
+    const session = sellerTestSessions.get(taskId);
+    if (!session) {
+      return null;
+    }
+
+    session.results[signal] = true;
+    session.updatedAt = Date.now();
+    return session;
+  }
+
+  function getSellerTestSession(taskId) {
+    return sellerTestSessions.get(taskId) ?? null;
+  }
+
+  function cleanupSellerTestSessions(maxAgeMs = 15 * 60 * 1000) {
+    const now = Date.now();
+
+    for (const [taskId, session] of sellerTestSessions.entries()) {
+      if (now - session.updatedAt > maxAgeMs) {
+        sellerTestSessions.delete(taskId);
+      }
+    }
   }
 
   function scheduleBroadcastWindowClose(broadcastId, callback, delayMs) {
@@ -176,7 +251,16 @@ export function createRelayState() {
       trackedUsers: userSSEConnections.size,
       trackedTasks: taskSSEConnections.size,
       uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+      maintenanceMode,
     };
+  }
+
+  function setMaintenanceMode(enabled) {
+    maintenanceMode = enabled;
+  }
+
+  function isMaintenanceMode() {
+    return maintenanceMode;
   }
 
   return {
@@ -190,13 +274,20 @@ export function createRelayState() {
     broadcastToUser,
     broadcastToTask,
     incrementOnlineSeconds,
+    markAgentHeartbeat,
     enqueueAgentMessage,
     drainAgentQueue,
     appendStreamChunk,
     consumeStreamBuffer,
+    startSellerTestSession,
+    markSellerTestSignal,
+    getSellerTestSession,
+    cleanupSellerTestSessions,
     scheduleBroadcastWindowClose,
     flushOnlineAccumulatorEntries,
     getRelayStats,
+    setMaintenanceMode,
+    isMaintenanceMode,
     activeWSConnections,
     activeSSEConnections,
   };
