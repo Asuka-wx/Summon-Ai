@@ -37,7 +37,12 @@ export const API_ERROR_CODES = [
   "captcha_required",
   "platform_at_capacity",
   "withdrawal_suspended",
-  "tx_already_processed",
+  "not_activated",
+  "code_not_found",
+  "code_deactivated",
+  "code_expired",
+  "code_exhausted",
+  "already_used",
 ] as const;
 
 export type ErrorCode = (typeof API_ERROR_CODES)[number];
@@ -204,6 +209,30 @@ export const ERROR_MESSAGES: Record<ErrorCode, { en: string; zh: string }> = {
   withdrawal_suspended: {
     en: "Withdrawals are temporarily suspended.",
     zh: "提现功能暂时维护中。",
+  },
+  not_activated: {
+    en: "Please activate your account with an invitation code.",
+    zh: "请先使用激活码激活你的账户。",
+  },
+  code_not_found: {
+    en: "Invalid invitation code. Please check and try again.",
+    zh: "激活码无效，请检查后重试。",
+  },
+  code_deactivated: {
+    en: "This invitation code has been deactivated.",
+    zh: "该激活码已被停用。",
+  },
+  code_expired: {
+    en: "This invitation code has expired.",
+    zh: "该激活码已过期。",
+  },
+  code_exhausted: {
+    en: "This invitation code has reached its usage limit.",
+    zh: "该激活码已达到使用上限。",
+  },
+  already_used: {
+    en: "You have already used this invitation code.",
+    zh: "你已经使用过这个激活码。",
   },
 };
 
