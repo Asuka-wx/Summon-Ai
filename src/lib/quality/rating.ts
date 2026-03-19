@@ -7,9 +7,10 @@ export function getRatingWeight({
   isNewUser: boolean;
   triggeredAnomaly: boolean;
 }) {
+  const seedRatingWeight = Number(process.env.SEED_RATING_WEIGHT ?? 0.7);
   const candidates = [
     1.0,
-    isSeedTask ? 0.7 : 1.0,
+    isSeedTask ? seedRatingWeight : 1.0,
     isNewUser ? 0.5 : 1.0,
     triggeredAnomaly ? 0.3 : 1.0,
   ];

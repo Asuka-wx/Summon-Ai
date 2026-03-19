@@ -1,19 +1,27 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+function toNumber(value: unknown, fallback: number) {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseFloat(value)
+        : Number.NaN;
+
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 const DEFAULT_QUALITY_CONTROL = {
-  downgrade_weeks: 3,
-  downgrade_min_tasks: 10,
-  downgrade_health_threshold: 60,
-  upgrade_weeks_hidden_to_demoted: 2,
-  upgrade_weeks_demoted_to_warned: 2,
-  upgrade_weeks_warned_to_normal: 1,
-  upgrade_min_tasks: 5,
-  upgrade_health_threshold: 80,
-  auto_pause_health_threshold: 60,
+  warn_threshold: toNumber(process.env.QUALITY_WARN_THRESHOLD, 60),
+  failure_rate_threshold: toNumber(process.env.QUALITY_FAILURE_RATE_THRESHOLD, 0.2),
+  observe_weeks: toNumber(process.env.QUALITY_OBSERVE_WEEKS, 3),
+  min_tasks: toNumber(process.env.QUALITY_MIN_TASKS, 10),
+  recovery_weeks: toNumber(process.env.QUALITY_RECOVERY_WEEKS, 2),
+  recovery_threshold: toNumber(process.env.QUALITY_RECOVERY_THRESHOLD, 80),
+  auto_pause_health_threshold: toNumber(process.env.QUALITY_WARN_THRESHOLD, 60),
   newbie_protection_tasks: 5,
   small_sample_base_score: 80,
   small_sample_min_tasks: 5,
-  failure_rate_threshold: 0.2,
 } as const;
 
 const DEFAULT_DISPLAY_THRESHOLDS = {
@@ -35,9 +43,51 @@ export async function getQualityControlConfig() {
     .eq("key", "quality_control")
     .maybeSingle();
 
+  const stored = (data?.value ?? {}) as Record<string, unknown>;
+
   return {
     ...DEFAULT_QUALITY_CONTROL,
-    ...(data?.value ?? {}),
+    ...stored,
+    warn_threshold: toNumber(
+      stored.warn_threshold ?? stored.downgrade_health_threshold,
+      DEFAULT_QUALITY_CONTROL.warn_threshold,
+    ),
+    failure_rate_threshold: toNumber(
+      stored.failure_rate_threshold,
+      DEFAULT_QUALITY_CONTROL.failure_rate_threshold,
+    ),
+    observe_weeks: toNumber(
+      stored.observe_weeks ?? stored.downgrade_weeks,
+      DEFAULT_QUALITY_CONTROL.observe_weeks,
+    ),
+    min_tasks: toNumber(
+      stored.min_tasks ?? stored.downgrade_min_tasks,
+      DEFAULT_QUALITY_CONTROL.min_tasks,
+    ),
+    recovery_weeks: toNumber(
+      stored.recovery_weeks ?? stored.upgrade_weeks_demoted_to_warned,
+      DEFAULT_QUALITY_CONTROL.recovery_weeks,
+    ),
+    recovery_threshold: toNumber(
+      stored.recovery_threshold ?? stored.upgrade_health_threshold,
+      DEFAULT_QUALITY_CONTROL.recovery_threshold,
+    ),
+    auto_pause_health_threshold: toNumber(
+      stored.auto_pause_health_threshold ?? stored.warn_threshold ?? stored.downgrade_health_threshold,
+      DEFAULT_QUALITY_CONTROL.auto_pause_health_threshold,
+    ),
+    newbie_protection_tasks: toNumber(
+      stored.newbie_protection_tasks,
+      DEFAULT_QUALITY_CONTROL.newbie_protection_tasks,
+    ),
+    small_sample_base_score: toNumber(
+      stored.small_sample_base_score,
+      DEFAULT_QUALITY_CONTROL.small_sample_base_score,
+    ),
+    small_sample_min_tasks: toNumber(
+      stored.small_sample_min_tasks,
+      DEFAULT_QUALITY_CONTROL.small_sample_min_tasks,
+    ),
   };
 }
 

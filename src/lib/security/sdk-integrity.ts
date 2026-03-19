@@ -29,10 +29,10 @@ export function compareSdkVersions(left: string, right: string) {
 
 export function computeSdkIntegrityHash(
   payload: SdkIntegrityPayload,
-  relaySecret: string = process.env.RELAY_SECRET ?? "",
+  signingKey: string = payload.sdkApiKey,
 ) {
-  if (!relaySecret) {
-    throw new Error("Missing RELAY_SECRET.");
+  if (!signingKey) {
+    throw new Error("Missing SDK signing key.");
   }
 
   const canonicalPayload = JSON.stringify({
@@ -41,15 +41,15 @@ export function computeSdkIntegrityHash(
     sdk_version: payload.sdkVersion,
   });
 
-  return createHmac("sha256", relaySecret).update(canonicalPayload).digest("hex");
+  return createHmac("sha256", signingKey).update(canonicalPayload).digest("hex");
 }
 
 export function verifySdkIntegrityHash(
   payload: SdkIntegrityPayload,
   integrityHash: string,
-  relaySecret: string = process.env.RELAY_SECRET ?? "",
+  signingKey: string = payload.sdkApiKey,
 ) {
-  return computeSdkIntegrityHash(payload, relaySecret) === integrityHash;
+  return computeSdkIntegrityHash(payload, signingKey) === integrityHash;
 }
 
 export function redactConversationContent(value: string) {
