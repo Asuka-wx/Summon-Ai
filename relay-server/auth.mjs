@@ -29,7 +29,7 @@ export function compareVersions(left, right) {
 }
 
 export function computeSdkIntegrityHash({ agentId, sdkApiKey, sdkVersion }) {
-  if (!relayConfig.relaySecret) {
+  if (!sdkApiKey) {
     return "";
   }
 
@@ -39,7 +39,7 @@ export function computeSdkIntegrityHash({ agentId, sdkApiKey, sdkVersion }) {
     sdk_version: sdkVersion,
   });
 
-  return createHmac("sha256", relayConfig.relaySecret)
+  return createHmac("sha256", sdkApiKey)
     .update(canonicalPayload)
     .digest("hex");
 }

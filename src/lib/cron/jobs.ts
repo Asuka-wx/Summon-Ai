@@ -7,6 +7,7 @@ import {
   notifyWithdrawalStatus,
 } from "@/lib/payments/service";
 import { sendNotification, sendWeeklyReports } from "@/lib/notifications/service";
+import { runBadgeScan } from "@/lib/badges/scan";
 import { updateCategoryBenchmarks } from "@/lib/quality/benchmarks";
 import { getDisplayThresholdsConfig, getQualityControlConfig } from "@/lib/quality/config";
 import {
@@ -14,6 +15,10 @@ import {
   calculateHealthScoreRaw,
   resolveNextQualityStatus,
 } from "@/lib/quality/health";
+import {
+  calculateLeaderboardScore,
+  calculateRisingScore,
+} from "@/lib/quality/leaderboards";
 import { cleanupExpiredConversations } from "@/lib/security/conversation-cleanup";
 import {
   getConcurrencyDowngradeHealth,
@@ -79,6 +84,202 @@ type CronJobResult = Record<string, unknown>;
 
 type CronJobHandler = () => Promise<CronJobResult>;
 
+async function buildRankingSnapshot({
+  period,
+  start,
+  end,
+}: {
+  period: "weekly" | "monthly";
+  start: string;
+  end: string;
+}) {
+  const supabase = createAdminClient();
+  const [agentsResult, tasksResult, ratingsResult, statsResult, displayThresholds] = await Promise.all([
+    supabase
+      .from("agents")
+      .select("id, categories, avg_rating, health_score, created_at")
+      .neq("status", "archived"),
+    supabase
+      .from("tasks")
+      .select("id, agent_id, is_direct, is_test, status, completed_at")
+      .eq("status", "completed")
+      .eq("is_test", false)
+      .gte("completed_at", `${start}T00:00:00.000Z`)
+      .lt("completed_at", `${end}T00:00:00.000Z`),
+    supabase
+      .from("ratings")
+      .select("agent_id, rating, user_weight, created_at")
+      .gte("created_at", `${start}T00:00:00.000Z`)
+      .lt("created_at", `${end}T00:00:00.000Z`),
+    supabase
+      .from("agent_daily_stats")
+      .select("agent_id, health_score_snapshot, stat_date")
+      .gte("stat_date", start)
+      .lt("stat_date", end),
+    getDisplayThresholdsConfig(),
+  ]);
+
+  if (agentsResult.error) {
+    throw new Error(`Failed to load agents for ${period} rankings: ${agentsResult.error.message}`);
+  }
+
+  if (tasksResult.error) {
+    throw new Error(`Failed to load tasks for ${period} rankings: ${tasksResult.error.message}`);
+  }
+
+  if (ratingsResult.error) {
+    throw new Error(`Failed to load ratings for ${period} rankings: ${ratingsResult.error.message}`);
+  }
+
+  if (statsResult.error) {
+    throw new Error(`Failed to load stats for ${period} rankings: ${statsResult.error.message}`);
+  }
+
+  const agents = agentsResult.data ?? [];
+  const tasks = tasksResult.data ?? [];
+  const ratings = ratingsResult.data ?? [];
+  const stats = statsResult.data ?? [];
+  const maxTaskCount = Math.max(
+    0,
+    ...agents.map(
+      (agent) => tasks.filter((task) => task.agent_id === agent.id).length,
+    ),
+  );
+
+  const leaderboardEntries = agents
+    .map((agent) => {
+      const agentTasks = tasks.filter((task) => task.agent_id === agent.id);
+      const agentRatings = ratings.filter((rating) => rating.agent_id === agent.id);
+      const agentStats = stats.filter((stat) => stat.agent_id === agent.id);
+      const repeatRate =
+        agentTasks.length === 0
+          ? 0
+          : agentTasks.filter((task) => task.is_direct).length / agentTasks.length;
+      const weightedRating =
+        agentRatings.length === 0
+          ? Number(agent.avg_rating ?? 0)
+          : agentRatings.reduce(
+              (sum, rating) => sum + Number(rating.rating ?? 0) * Number(rating.user_weight ?? 1),
+              0,
+            ) /
+            Math.max(
+              1,
+              agentRatings.reduce(
+                (sum, rating) => sum + Number(rating.user_weight ?? 1),
+                0,
+              ),
+            );
+      const averageHealth =
+        agentStats.length === 0
+          ? Number(agent.health_score ?? 0)
+          : agentStats.reduce(
+              (sum, stat) => sum + Number(stat.health_score_snapshot ?? 0),
+              0,
+            ) / agentStats.length;
+      const periodScore = calculateLeaderboardScore({
+        avgRating: Number(weightedRating ?? 0),
+        taskCount: agentTasks.length,
+        maxTaskCountInPeriod: maxTaskCount,
+        healthScore: Number(averageHealth ?? 0),
+        repeatRate,
+      });
+      const risingScore = calculateRisingScore({
+        avgRating7d: Number(weightedRating ?? 0),
+        avgRating30d: Number(agent.avg_rating ?? 0),
+        tasks7d: agentTasks.length,
+        health7d: Number(averageHealth ?? 0),
+        health30d: Number(agent.health_score ?? 0),
+      });
+
+      return {
+        agent_id: agent.id,
+        categories: agent.categories ?? [],
+        score: periodScore,
+        rising_score: risingScore,
+        avg_rating: Number(weightedRating ?? 0).toFixed(2),
+        task_count: agentTasks.length,
+        repeat_rate: Number(repeatRate.toFixed(4)),
+        health_score: Number(averageHealth ?? 0).toFixed(2),
+        rookie:
+          Date.now() - new Date(agent.created_at).getTime() <=
+          displayThresholds.leaderboard_rookie_max_days * 24 * 60 * 60 * 1000,
+      };
+    });
+
+  const rankings = leaderboardEntries
+    .filter((entry) => entry.task_count >= displayThresholds.leaderboard_overall_min_tasks)
+    .sort((left, right) => right.score - left.score)
+    .map((entry, index) => ({
+      ...entry,
+      categories: undefined,
+      rank: index + 1,
+    }));
+
+  const categoryNames = [...new Set(leaderboardEntries.flatMap((entry) => entry.categories ?? []))];
+  const categorySnapshots = categoryNames
+    .map((category) => {
+      const categoryRankings = leaderboardEntries
+        .filter(
+          (entry) =>
+            (entry.categories ?? []).includes(category) &&
+            entry.task_count >= displayThresholds.leaderboard_category_min_tasks,
+        )
+        .sort((left, right) => right.score - left.score)
+        .map((entry, index) => ({
+          ...entry,
+          categories: undefined,
+          rank: index + 1,
+        }));
+
+      return {
+        category,
+        rankings: categoryRankings,
+      };
+    })
+    .filter((snapshot) => snapshot.rankings.length >= displayThresholds.leaderboard_min_entries);
+
+  await supabase.from("ranking_snapshots").upsert(
+    {
+      period,
+      period_start: start,
+      period_end: end,
+      board_type: "overall",
+      category: null,
+      rankings,
+      created_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "period,period_start,board_type,category",
+    },
+  );
+
+  if (categorySnapshots.length > 0) {
+    await Promise.all(
+      categorySnapshots.map((snapshot) =>
+        supabase.from("ranking_snapshots").upsert(
+          {
+            period,
+            period_start: start,
+            period_end: end,
+            board_type: "category",
+            category: snapshot.category,
+            rankings: snapshot.rankings,
+            created_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "period,period_start,board_type,category",
+          },
+        ),
+      ),
+    );
+  }
+
+  return {
+    overallRankings: rankings,
+    categorySnapshots,
+  };
+}
+
 async function runHealthRecalcJob() {
   const supabase = createAdminClient();
   const batchSize = Number(process.env.HEALTH_RECALC_BATCH_SIZE ?? 50);
@@ -90,7 +291,7 @@ async function runHealthRecalcJob() {
   const { data: agents, error } = await supabase
     .from("agents")
     .select(
-      "id, concurrency_level, health_score, concurrency_upgraded_at, total_tasks, completion_rate, cancel_rate, fault_rate, quality_status, status, categories, avg_rating, avg_response_time_ms",
+      "id, concurrency_level, health_score, concurrency_upgraded_at, total_tasks, completion_rate, cancel_rate, fault_rate, quality_status, quality_status_changed_at, quality_tasks_since_change, status, categories, avg_rating, avg_response_time_ms",
     )
     .order("concurrency_upgraded_at", { ascending: true, nullsFirst: true })
     .limit(batchSize);
@@ -104,6 +305,7 @@ async function runHealthRecalcJob() {
       .from("tasks")
       .select("id, status, end_reason")
       .eq("agent_id", agent.id)
+      .eq("is_test", false)
       .not("completed_at", "is", null)
       .order("completed_at", { ascending: false })
       .limit(observationWindow);
@@ -193,20 +395,31 @@ async function runHealthRecalcJob() {
       | "demoted"
       | "hidden"
       | "recovery_pending";
-
+    const qualityStatusRank = {
+      normal: 0,
+      warned: 1,
+      demoted: 2,
+      hidden: 3,
+      recovery_pending: 2,
+    } as const;
+    const qualityStatusChangedAt = agent.quality_status_changed_at
+      ? new Date(agent.quality_status_changed_at)
+      : null;
+    const weeksSinceQualityChange = qualityStatusChangedAt
+      ? (Date.now() - qualityStatusChangedAt.getTime()) / (7 * 24 * 60 * 60 * 1000)
+      : 0;
     const nextQualityStatus = resolveNextQualityStatus({
       currentStatus: currentQualityStatus,
       healthScore: recentHealthScore,
-      observationWeeks: 3,
-      observedTaskCount: observationTaskCount,
-      downgradeWeeks: qualityControl.downgrade_weeks,
-      downgradeMinTasks: qualityControl.downgrade_min_tasks,
-      downgradeHealthThreshold: qualityControl.downgrade_health_threshold,
-      upgradeWeeksHiddenToDemoted: qualityControl.upgrade_weeks_hidden_to_demoted,
-      upgradeWeeksDemotedToWarned: qualityControl.upgrade_weeks_demoted_to_warned,
-      upgradeWeeksWarnedToNormal: qualityControl.upgrade_weeks_warned_to_normal,
-      upgradeMinTasks: qualityControl.upgrade_min_tasks,
-      upgradeHealthThreshold: qualityControl.upgrade_health_threshold,
+      failureRate: Number(agent.fault_rate ?? 0),
+      weeksSinceChange: weeksSinceQualityChange,
+      tasksSinceChange: Number(agent.quality_tasks_since_change ?? 0),
+      warnThreshold: qualityControl.warn_threshold,
+      failureRateThreshold: qualityControl.failure_rate_threshold,
+      observeWeeks: qualityControl.observe_weeks,
+      minTasks: qualityControl.min_tasks,
+      recoveryWeeks: qualityControl.recovery_weeks,
+      recoveryThreshold: qualityControl.recovery_threshold,
     });
 
     const effectiveStatus =
@@ -222,7 +435,13 @@ async function runHealthRecalcJob() {
         health_score: recentHealthScore,
         quality_status: nextQualityStatus,
         quality_status_changed_at:
-          nextQualityStatus !== agent.quality_status ? new Date().toISOString() : agent.concurrency_upgraded_at,
+          nextQualityStatus !== agent.quality_status
+            ? new Date().toISOString()
+            : agent.quality_status_changed_at,
+        quality_tasks_since_change:
+          nextQualityStatus !== agent.quality_status
+            ? 0
+            : Number(agent.quality_tasks_since_change ?? 0),
         avg_response_time_ms:
           Number(agent.total_tasks ?? 0) < 5
             ? 0
@@ -269,7 +488,9 @@ async function runHealthRecalcJob() {
       if (owner?.owner_id) {
         void sendNotification(
           owner.owner_id,
-          nextQualityStatus === "normal" ? "quality_restored" : "quality_warning",
+          qualityStatusRank[nextQualityStatus] < qualityStatusRank[currentQualityStatus]
+            ? "quality_restored"
+            : "quality_warning",
           {
             agent_id: agent.id,
             quality_status: nextQualityStatus,
@@ -355,6 +576,7 @@ async function runTimeoutCheckJob() {
       pause_expires_at: new Date(now.getTime() + pauseExpiryDays * 24 * 60 * 60 * 1000).toISOString(),
     })
     .eq("status", "active")
+    .eq("is_test", false)
     .lt("last_activity_at", idleCutoff)
     .select("id, user_id");
 
@@ -367,6 +589,7 @@ async function runTimeoutCheckJob() {
     })
     .eq("status", "paused")
     .eq("pause_reason", "insufficient_balance")
+    .eq("is_test", false)
     .lt("paused_at", balanceCutoff)
     .select("id, agent_id");
 
@@ -379,6 +602,7 @@ async function runTimeoutCheckJob() {
     })
     .eq("status", "paused")
     .eq("pause_reason", "disconnect_await")
+    .eq("is_test", false)
     .lt("paused_at", disconnectCutoff)
     .select("id, agent_id");
 
@@ -390,6 +614,7 @@ async function runTimeoutCheckJob() {
       completed_at: now.toISOString(),
     })
     .eq("status", "paused")
+    .eq("is_test", false)
     .lt("paused_at", pauseExpiryCutoff)
     .select("id, agent_id");
 
@@ -455,6 +680,7 @@ async function runStaleTaskCleanupJob() {
       completed_at: new Date().toISOString(),
     })
     .eq("status", "confirming")
+    .eq("is_test", false)
     .lt("created_at", confirmationCutoff)
     .select("id, agent_id");
 
@@ -466,6 +692,7 @@ async function runStaleTaskCleanupJob() {
       completed_at: new Date().toISOString(),
     })
     .eq("status", "paused")
+    .eq("is_test", false)
     .lt("pause_expires_at", selectionCutoff)
     .select("id, agent_id");
 
@@ -552,30 +779,23 @@ async function runStaleTaskCleanupJob() {
 }
 
 async function runRankingResetWeeklyJob() {
-  const supabase = createAdminClient();
   const now = new Date();
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - 7);
-
-  const { error } = await supabase.from("ranking_snapshots").insert({
+  const snapshot = await buildRankingSnapshot({
     period: "weekly",
-    period_start: start.toISOString().slice(0, 10),
-    period_end: end.toISOString().slice(0, 10),
-    board_type: "overall",
-    category: null,
-    rankings: [],
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
   });
-
-  if (error) {
-    throw new Error(`Failed to insert weekly ranking snapshot: ${error.message}`);
-  }
 
   await sendWeeklyReports();
 
   return {
     snapshot_period_start: start.toISOString().slice(0, 10),
     snapshot_period_end: end.toISOString().slice(0, 10),
+    ranking_count: snapshot.overallRankings.length,
+    category_board_count: snapshot.categorySnapshots.length,
   };
 }
 
@@ -783,42 +1003,31 @@ async function runAnomalyScanJob() {
 }
 
 async function runBadgeScanJob() {
-  const supabase = createAdminClient();
-  const { data: activeUsers } = await supabase
-    .from("users")
-    .select("id")
-    .limit(100);
-
-  return {
-    scanned_user_count: activeUsers?.length ?? 0,
-  };
+  return runBadgeScan();
 }
 
 async function runLeaderboardArchiveJob() {
-  const supabase = createAdminClient();
   const now = new Date();
-  const weekStart = new Date(now);
+  const weekEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const weekStart = new Date(weekEnd);
   weekStart.setUTCDate(weekStart.getUTCDate() - 7);
-
-  const { data, error } = await supabase
-    .from("ranking_snapshots")
-    .insert({
-      period: "weekly",
-      period_start: weekStart.toISOString().slice(0, 10),
-      period_end: now.toISOString().slice(0, 10),
-      board_type: "overall",
-      category: null,
-      rankings: [],
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    throw new Error(`Failed to archive leaderboard snapshot: ${error.message}`);
-  }
+  const monthStart = new Date(Date.UTC(weekEnd.getUTCFullYear(), weekEnd.getUTCMonth(), 1));
+  const weeklySnapshot = await buildRankingSnapshot({
+    period: "weekly",
+    start: weekStart.toISOString().slice(0, 10),
+    end: weekEnd.toISOString().slice(0, 10),
+  });
+  const monthlySnapshot = await buildRankingSnapshot({
+    period: "monthly",
+    start: monthStart.toISOString().slice(0, 10),
+    end: weekEnd.toISOString().slice(0, 10),
+  });
 
   return {
-    snapshot_id: data?.id ?? null,
+    weekly_ranking_count: weeklySnapshot.overallRankings.length,
+    weekly_category_board_count: weeklySnapshot.categorySnapshots.length,
+    monthly_ranking_count: monthlySnapshot.overallRankings.length,
+    monthly_category_board_count: monthlySnapshot.categorySnapshots.length,
   };
 }
 

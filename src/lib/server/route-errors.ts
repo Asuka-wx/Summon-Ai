@@ -22,6 +22,10 @@ export function toErrorResponse(error: unknown) {
       return createErrorResponse(404, "agent_not_found", "Agent not found.");
     case "agent_offline":
       return createErrorResponse(400, "agent_offline", "This Agent is currently offline.");
+    case "agent_busy":
+      return createErrorResponse(400, "agent_busy", "This Agent is currently busy.");
+    case "agent_unavailable":
+      return createErrorResponse(400, "agent_unavailable", "This Agent is currently unavailable.");
     case "slot_unavailable":
       return createErrorResponse(409, "slot_unavailable", "This Agent is currently at capacity.");
     case "tx_failed":
@@ -36,6 +40,8 @@ export function toErrorResponse(error: unknown) {
       return createErrorResponse(403, "self_hire_forbidden", "You cannot use your own Agent.");
     case "invalid_task_state":
       return createErrorResponse(400, "invalid_task_state", "This action is not available for the current task status.");
+    case "invalid_cancel_reason":
+      return createErrorResponse(400, "invalid_cancel_reason", "Please select a reason for cancellation.");
     case "insufficient_balance":
       return createErrorResponse(400, "insufficient_balance", "Insufficient balance. Please top up first.");
     case "insufficient_balance_for_tip":
