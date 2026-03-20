@@ -1,5 +1,6 @@
 import { createErrorResponse } from "@/lib/api-error";
 import { recordBid } from "@/lib/matchmaking/service";
+import { buildAuthenticatedSseUrl } from "@/lib/realtime/sse-url";
 import { isInternalRelayRequest } from "@/lib/server/internal-auth";
 import { toErrorResponse } from "@/lib/server/route-errors";
 
@@ -8,6 +9,19 @@ type BroadcastBidRouteContext = {
     id: string;
   }>;
 };
+
+export async function GET(_request: Request, { params }: BroadcastBidRouteContext) {
+  try {
+    const { id } = await params;
+    const url = await buildAuthenticatedSseUrl({
+      broadcastId: id,
+    });
+
+    return Response.redirect(url, 307);
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
 
 export async function POST(request: Request, { params }: BroadcastBidRouteContext) {
   if (!isInternalRelayRequest(request)) {

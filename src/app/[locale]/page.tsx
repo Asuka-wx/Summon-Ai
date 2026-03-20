@@ -1,6 +1,10 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { setRequestLocale } from "next-intl/server";
 
-import { HomePage } from "@/components/home/home-page";
+import { MarketplaceHomePage } from "@/components/home/marketplace-home";
+import { listPublicAgents } from "@/lib/agents/catalog";
+import { getPlatformConfigValue } from "@/lib/platform-config/service";
+import { getRecommendedAgentsForUser } from "@/lib/recommendations/service";
+import { getCurrentUserId } from "@/lib/server/current-user";
 
 type LocalePageProps = {
   params: Promise<{
@@ -10,42 +14,27 @@ type LocalePageProps = {
 
 export default async function LocaleHomePage({ params }: LocalePageProps) {
   const { locale } = await params;
+  const normalizedLocale = locale === "zh" ? "zh" : "en";
 
   setRequestLocale(locale);
-
-  const t = await getTranslations({ locale, namespace: "home" });
+  const currentUserId = await getCurrentUserId();
+  const [recommended, hotAgents, newAgents, freeAgents, categories] = await Promise.all([
+    getRecommendedAgentsForUser(currentUserId),
+    listPublicAgents({ section: "hot", limit: 6, offset: 0 }),
+    listPublicAgents({ section: "new", limit: 6, offset: 0 }),
+    listPublicAgents({ section: "free", limit: 6, offset: 0 }),
+    getPlatformConfigValue<string[]>("agent_categories", []),
+  ]);
 
   return (
-    <HomePage
-      ctaLabel={t("cta")}
-      ctaHref="/upload-lab"
-      description={t("description")}
-      eyebrow={t("eyebrow")}
-      locale={locale}
-      sections={[
-        {
-          eyebrow: t("pillars.marketplace.eyebrow"),
-          title: t("pillars.marketplace.title"),
-          description: t("pillars.marketplace.description"),
-        },
-        {
-          eyebrow: t("pillars.realtime.eyebrow"),
-          title: t("pillars.realtime.title"),
-          description: t("pillars.realtime.description"),
-        },
-        {
-          eyebrow: t("pillars.foundation.eyebrow"),
-          title: t("pillars.foundation.title"),
-          description: t("pillars.foundation.description"),
-        },
-      ]}
-      stats={[
-        t("stats.routing"),
-        t("stats.supabase"),
-        t("stats.relay"),
-        t("stats.sentry"),
-      ]}
-      title={t("title")}
+    <MarketplaceHomePage
+      locale={normalizedLocale}
+      categories={categories}
+      showRecommended={Boolean(currentUserId)}
+      recommendedAgents={recommended.agents}
+      hotAgents={hotAgents}
+      newAgents={newAgents}
+      freeAgents={freeAgents}
     />
   );
 }

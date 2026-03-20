@@ -5,6 +5,7 @@ export function createRelayState() {
   const agentSockets = new Map();
   const userSSEConnections = new Map();
   const taskSSEConnections = new Map();
+  const broadcastSSEConnections = new Map();
   const ipConnectionCounts = new Map();
   const onlineAccumulator = new Map();
   const agentLastHeartbeatAt = new Map();
@@ -12,6 +13,7 @@ export function createRelayState() {
   const streamBuffers = new Map();
   const broadcastWindowTimers = new Map();
   const sellerTestSessions = new Map();
+  const sseEventSequences = new Map();
   let maintenanceMode = false;
 
   function registerAgentSocket(agentId, clientIp, socket) {
@@ -63,33 +65,34 @@ export function createRelayState() {
     return ipConnectionCounts.get(clientIp) ?? 0;
   }
 
-  function registerSseConnection({ userId, taskId, response }) {
+  function registerSseConnection({ userId, taskId, broadcastId, response }) {
     activeSSEConnections.add(response);
-
-    if (userId) {
-      const userConnections = userSSEConnections.get(userId) ?? new Set();
-      userConnections.add(response);
-      userSSEConnections.set(userId, userConnections);
-    }
 
     if (taskId && userId) {
       const taskKey = `${taskId}:${userId}`;
       const taskConnections = taskSSEConnections.get(taskKey) ?? new Set();
       taskConnections.add(response);
       taskSSEConnections.set(taskKey, taskConnections);
+      return;
+    }
+
+    if (broadcastId && userId) {
+      const broadcastKey = `${broadcastId}:${userId}`;
+      const broadcastConnections = broadcastSSEConnections.get(broadcastKey) ?? new Set();
+      broadcastConnections.add(response);
+      broadcastSSEConnections.set(broadcastKey, broadcastConnections);
+      return;
+    }
+
+    if (userId) {
+      const userConnections = userSSEConnections.get(userId) ?? new Set();
+      userConnections.add(response);
+      userSSEConnections.set(userId, userConnections);
     }
   }
 
-  function unregisterSseConnection({ userId, taskId, response }) {
+  function unregisterSseConnection({ userId, taskId, broadcastId, response }) {
     activeSSEConnections.delete(response);
-
-    if (userId) {
-      const userConnections = userSSEConnections.get(userId);
-      userConnections?.delete(response);
-      if (!userConnections || userConnections.size === 0) {
-        userSSEConnections.delete(userId);
-      }
-    }
 
     if (taskId && userId) {
       const taskKey = `${taskId}:${userId}`;
@@ -98,12 +101,41 @@ export function createRelayState() {
       if (!taskConnections || taskConnections.size === 0) {
         taskSSEConnections.delete(taskKey);
       }
+      return;
+    }
+
+    if (broadcastId && userId) {
+      const broadcastKey = `${broadcastId}:${userId}`;
+      const broadcastConnections = broadcastSSEConnections.get(broadcastKey);
+      broadcastConnections?.delete(response);
+      if (!broadcastConnections || broadcastConnections.size === 0) {
+        broadcastSSEConnections.delete(broadcastKey);
+      }
+      return;
+    }
+
+    if (userId) {
+      const userConnections = userSSEConnections.get(userId);
+      userConnections?.delete(response);
+      if (!userConnections || userConnections.size === 0) {
+        userSSEConnections.delete(userId);
+      }
     }
   }
 
-  function writeSseEvent(response, event, data, retryMs) {
+  function nextSseEventId(scope) {
+    const nextSequence = (sseEventSequences.get(scope) ?? 0) + 1;
+    sseEventSequences.set(scope, nextSequence);
+    return `${scope}:${nextSequence}`;
+  }
+
+  function writeSseEvent(response, event, data, retryMs, eventId) {
     if (typeof retryMs === "number") {
       response.write(`retry: ${retryMs}\n`);
+    }
+
+    if (eventId) {
+      response.write(`id: ${eventId}\n`);
     }
 
     response.write(`event: ${event}\n`);
@@ -116,8 +148,9 @@ export function createRelayState() {
       return 0;
     }
 
+    const eventId = nextSseEventId(`user:${userId}`);
     targets.forEach((response) => {
-      writeSseEvent(response, event, data);
+      writeSseEvent(response, event, data, undefined, eventId);
     });
 
     return targets.size;
@@ -131,8 +164,28 @@ export function createRelayState() {
         continue;
       }
 
+      const eventId = nextSseEventId(`task:${taskId}`);
       targets.forEach((response) => {
-        writeSseEvent(response, event, data);
+        writeSseEvent(response, event, data, undefined, eventId);
+      });
+
+      deliveredCount += targets.size;
+    }
+
+    return deliveredCount;
+  }
+
+  function broadcastToBroadcast(broadcastId, event, data) {
+    let deliveredCount = 0;
+
+    for (const [broadcastKey, targets] of broadcastSSEConnections.entries()) {
+      if (!broadcastKey.startsWith(`${broadcastId}:`)) {
+        continue;
+      }
+
+      const eventId = nextSseEventId(`broadcast:${broadcastId}`);
+      targets.forEach((response) => {
+        writeSseEvent(response, event, data, undefined, eventId);
       });
 
       deliveredCount += targets.size;
@@ -250,6 +303,7 @@ export function createRelayState() {
       connectedAgents: agentSockets.size,
       trackedUsers: userSSEConnections.size,
       trackedTasks: taskSSEConnections.size,
+      trackedBroadcasts: broadcastSSEConnections.size,
       uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
       maintenanceMode,
     };
@@ -271,8 +325,10 @@ export function createRelayState() {
     registerSseConnection,
     unregisterSseConnection,
     writeSseEvent,
+    nextSseEventId,
     broadcastToUser,
     broadcastToTask,
+    broadcastToBroadcast,
     incrementOnlineSeconds,
     markAgentHeartbeat,
     enqueueAgentMessage,

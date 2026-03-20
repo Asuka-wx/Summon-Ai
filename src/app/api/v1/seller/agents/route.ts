@@ -3,12 +3,24 @@ import {
   createSellerAgent,
   listSellerAgents,
 } from "@/lib/seller/agents";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { getCurrentUserProfile } from "@/lib/server/current-user";
 import { toErrorResponse } from "@/lib/server/route-errors";
 
 export async function GET() {
   try {
     const currentUser = await getCurrentUserProfile();
+    const limited = await enforceRateLimit({
+      key: currentUser.id,
+      prefix: "auth-api",
+      maxRequests: 30,
+      interval: "1 m",
+    });
+
+    if (limited) {
+      return limited;
+    }
+
     const agents = await listSellerAgents(currentUser.id);
 
     return Response.json({
@@ -22,6 +34,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const currentUser = await getCurrentUserProfile();
+    const limited = await enforceRateLimit({
+      key: currentUser.id,
+      prefix: "auth-api",
+      maxRequests: 30,
+      interval: "1 m",
+    });
+
+    if (limited) {
+      return limited;
+    }
 
     if (currentUser.is_frozen) {
       throw new Error("account_frozen");

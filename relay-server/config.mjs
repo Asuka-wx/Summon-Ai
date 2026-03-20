@@ -4,6 +4,7 @@ export const relayConfig = {
   healthCheckPath: process.env.FLYIO_HEALTH_CHECK_PATH ?? "/health",
   gracefulShutdownTimeoutMs: Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? 5000),
   heartbeatIntervalSeconds: Number(process.env.HEARTBEAT_INTERVAL_SECONDS ?? 15),
+  sseHeartbeatIntervalSeconds: Number(process.env.SSE_HEARTBEAT_INTERVAL_SECONDS ?? 30),
   heartbeatMissThreshold: Number(process.env.HEARTBEAT_MISS_THRESHOLD ?? 2),
   sdkMinVersion: process.env.SDK_MIN_VERSION ?? "1.0.0",
   relaySecret: process.env.RELAY_SECRET ?? "",
