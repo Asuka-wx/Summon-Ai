@@ -1,12 +1,24 @@
 import { createErrorResponse } from "@/lib/api-error";
 import { validateAndConfirmDeposit } from "@/lib/payments/service";
 import type { DepositRequest } from "@/lib/payments/types";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { requireCurrentUserId } from "@/lib/server/current-user";
 import { toErrorResponse } from "@/lib/server/route-errors";
 
 export async function POST(request: Request) {
   try {
     const userId = await requireCurrentUserId();
+    const limited = await enforceRateLimit({
+      key: userId,
+      prefix: "deposit-post",
+      maxRequests: 10,
+      interval: "1 m",
+    });
+
+    if (limited) {
+      return limited;
+    }
+
     const body = (await request.json()) as DepositRequest;
 
     if (!body.tx_hash || !body.from_address) {

@@ -1,6 +1,6 @@
 import { createErrorResponse } from "@/lib/api-error";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { requireAdminSession } from "@/lib/security/admin-access";
-import { createApiRatelimit } from "@/lib/upstash/ratelimit";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(request: Request) {
@@ -56,13 +56,16 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const admin = await requireAdminSession();
-    const limiter = createApiRatelimit("admin-invitation-codes", 10, "1 m");
+    const limited = await enforceRateLimit({
+      key: admin.userId,
+      prefix: "admin-invitation-codes",
+      maxRequests: 10,
+      interval: "1 m",
+      message: "Too many invitation code generation requests.",
+    });
 
-    if (limiter) {
-      const result = await limiter.limit(admin.userId);
-      if (!result.success) {
-        return createErrorResponse(429, "rate_limit_exceeded", "Too many invitation code generation requests.");
-      }
+    if (limited) {
+      return limited;
     }
 
     const body = (await request.json()) as {

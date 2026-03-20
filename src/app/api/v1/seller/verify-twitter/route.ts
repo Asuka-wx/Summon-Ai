@@ -1,4 +1,5 @@
 import { createErrorResponse } from "@/lib/api-error";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { requireCurrentUserId } from "@/lib/server/current-user";
 import { verifyTwitterOwnership } from "@/lib/security/social-binding";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -6,6 +7,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function POST(request: Request) {
   try {
     const userId = await requireCurrentUserId();
+    const limited = await enforceRateLimit({
+      key: userId,
+      prefix: "auth-api",
+      maxRequests: 30,
+      interval: "1 m",
+    });
+
+    if (limited) {
+      return limited;
+    }
+
     const body = (await request.json()) as {
       twitterHandle?: string;
       tweetUrl?: string;

@@ -1,31 +1,47 @@
-import { createErrorResponse } from "@/lib/api-error";
+import { z } from "zod";
+
 import { createDirectTask } from "@/lib/matchmaking/service";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { getCurrentUserProfile } from "@/lib/server/current-user";
 import { toErrorResponse } from "@/lib/server/route-errors";
+import {
+  createValidationErrorResponse,
+  parseJsonBody,
+} from "@/lib/validation";
+
+const directTaskSchema = z.object({
+  agent_id: z.string().uuid(),
+  prompt: z.string().trim().min(1).max(2000),
+});
 
 export async function POST(request: Request) {
   try {
     const currentUser = await getCurrentUserProfile();
+    const limited = await enforceRateLimit({
+      key: currentUser.id,
+      prefix: "auth-api",
+      maxRequests: 30,
+      interval: "1 m",
+    });
+
+    if (limited) {
+      return limited;
+    }
 
     if (currentUser.is_frozen) {
       throw new Error("account_frozen");
     }
 
-    const body = (await request.json()) as {
-      agent_id?: string;
-      prompt?: string;
-    };
+    const body = await parseJsonBody(request, directTaskSchema);
 
-    if (!body.agent_id || !body.prompt || body.prompt.trim().length === 0) {
-      return createErrorResponse(400, "validation_error", "Direct task payload is invalid.", {
-        agent_id: "Expected agent_id and prompt.",
-      });
+    if (!body.success) {
+      return createValidationErrorResponse(body.error, "Direct task payload is invalid.");
     }
 
     const result = await createDirectTask({
       userId: currentUser.id,
-      agentId: body.agent_id,
-      prompt: body.prompt.trim(),
+      agentId: body.data.agent_id,
+      prompt: body.data.prompt,
     });
 
     return Response.json(result, { status: 201 });
