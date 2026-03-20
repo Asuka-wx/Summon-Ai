@@ -8,6 +8,10 @@ import {
 } from "@/lib/protocol/matchmaking";
 import { sendNotification } from "@/lib/notifications/service";
 import {
+  invalidateSimilarRecommendations,
+  invalidateUserRecommendations,
+} from "@/lib/recommendations/service";
+import {
   sendRelayMessage,
   broadcastToAgents,
   assignTaskToAgent,
@@ -51,6 +55,61 @@ async function getUserBalance(userId: string) {
     .single();
 
   return Number(data?.balance ?? 0);
+}
+
+async function getUserActiveTaskCount(userId: string) {
+  const supabase = createAdminClient();
+  const { count } = await supabase
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .in("status", ["confirming", "active", "paused"]);
+
+  return Number(count ?? 0);
+}
+
+async function ensureUserTaskCapacity(userId: string) {
+  const activeTaskCount = await getUserActiveTaskCount(userId);
+
+  if (activeTaskCount >= Number(process.env.MAX_ACTIVE_TASKS_PER_USER ?? 5)) {
+    throw new Error("invalid_task_state");
+  }
+}
+
+async function ensurePlatformTaskCapacity() {
+  const supabase = createAdminClient();
+  const { count } = await supabase
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["confirming", "active", "paused"]);
+
+  if (Number(count ?? 0) >= Number(process.env.MAX_PLATFORM_CONCURRENT_TASKS ?? 50)) {
+    throw new Error("platform_at_capacity");
+  }
+}
+
+async function recordUserAgentUsage(userId: string, agentId: string) {
+  const supabase = createAdminClient();
+  const now = new Date().toISOString();
+  const { data: existing } = await supabase
+    .from("user_agent_usage")
+    .select("use_count, created_at")
+    .eq("user_id", userId)
+    .eq("agent_id", agentId)
+    .maybeSingle();
+
+  await supabase.from("user_agent_usage").upsert(
+    {
+      user_id: userId,
+      agent_id: agentId,
+      last_used_at: now,
+      use_count: Number(existing?.use_count ?? 0) + 1,
+      created_at: existing?.created_at ?? now,
+    },
+    {
+      onConflict: "user_id,agent_id",
+    },
+  );
 }
 
 async function maybeHandleSeedGraduation(agentId: string) {
@@ -160,15 +219,8 @@ export async function createBroadcast({
     Number(process.env.BROADCAST_SELECTION_TIMEOUT_MINUTES ?? 10),
   );
 
-  const { count: activeTaskCount } = await supabase
-    .from("tasks")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .in("status", ["confirming", "active", "paused"]);
-
-  if ((activeTaskCount ?? 0) >= Number(process.env.MAX_ACTIVE_TASKS_PER_USER ?? 5)) {
-    throw new Error("invalid_task_state");
-  }
+  await ensureUserTaskCapacity(userId);
+  await ensurePlatformTaskCapacity();
 
   const { data, error } = await supabase
     .from("broadcasts")
@@ -347,6 +399,8 @@ export async function selectAgentForBroadcast({
   userId: string;
 }) {
   const supabase = createAdminClient();
+  await ensureUserTaskCapacity(userId);
+  await ensurePlatformTaskCapacity();
 
   const { data: broadcast, error: broadcastError } = await supabase
     .from("broadcasts")
@@ -442,6 +496,9 @@ export async function selectAgentForBroadcast({
   }
 
   await createTaskEncryptionKey(task.id);
+  await recordUserAgentUsage(userId, agentId);
+  await invalidateUserRecommendations(userId);
+  await invalidateSimilarRecommendations(agentId);
 
   await assignTaskToAgent({
     agentId,
@@ -483,6 +540,8 @@ export async function createDirectTask({
   prompt: string;
 }) {
   const supabase = createAdminClient();
+  await ensureUserTaskCapacity(userId);
+  await ensurePlatformTaskCapacity();
   const { data: agent, error: agentError } = await supabase
     .from("agents")
     .select("id, owner_id, status, active_tasks, max_concurrent, price_per_call, is_seed, seed_free_remaining, seed_max_rounds, quality_status")
@@ -556,6 +615,9 @@ export async function createDirectTask({
   }
 
   await createTaskEncryptionKey(task.id);
+  await recordUserAgentUsage(userId, agentId);
+  await invalidateUserRecommendations(userId);
+  await invalidateSimilarRecommendations(agentId);
 
   const taskKey = await getTaskEncryptionKey(task.id);
   await supabase.from("task_messages").insert({

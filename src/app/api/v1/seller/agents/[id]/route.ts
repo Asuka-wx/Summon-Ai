@@ -1,5 +1,6 @@
 import { createErrorResponse } from "@/lib/api-error";
 import { getSellerAgent, updateSellerAgentProfile } from "@/lib/seller/agents";
+import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { getCurrentUserProfile } from "@/lib/server/current-user";
 import { toErrorResponse } from "@/lib/server/route-errors";
 
@@ -15,6 +16,17 @@ export async function GET(
 ) {
   try {
     const currentUser = await getCurrentUserProfile();
+    const limited = await enforceRateLimit({
+      key: currentUser.id,
+      prefix: "auth-api",
+      maxRequests: 30,
+      interval: "1 m",
+    });
+
+    if (limited) {
+      return limited;
+    }
+
     const { id } = await params;
     const agent = await getSellerAgent(currentUser.id, id);
 
@@ -32,6 +44,17 @@ export async function PATCH(
 ) {
   try {
     const currentUser = await getCurrentUserProfile();
+    const limited = await enforceRateLimit({
+      key: currentUser.id,
+      prefix: "auth-api",
+      maxRequests: 30,
+      interval: "1 m",
+    });
+
+    if (limited) {
+      return limited;
+    }
+
     const { id } = await params;
     const body = (await request.json()) as {
       name?: string;

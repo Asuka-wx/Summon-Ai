@@ -13,12 +13,12 @@ export const siteConfig = {
       href: "/",
     },
     {
-      key: "uploadLab",
-      href: "/upload-lab",
+      key: "showcase",
+      href: "/showcase",
     },
     {
-      key: "health",
-      href: "/api/v1/health",
+      key: "leaderboard",
+      href: "/leaderboard",
     },
   ],
 } as const;
