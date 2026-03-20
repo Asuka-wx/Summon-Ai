@@ -144,11 +144,11 @@ export async function handleRelayAPI(request, response, relayState, auth) {
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/relay/messages") {
-    const body = await readJsonBody(request);
-    let delivered = 0;
+    if (request.method === "POST" && url.pathname === "/relay/messages") {
+      const body = await readJsonBody(request);
+      let delivered = 0;
 
-    if (body.targetAgentId) {
+      if (body.targetAgentId) {
       const agentResult = sendMessageToAgent(
         relayState,
         body.targetAgentId,
@@ -158,21 +158,25 @@ export async function handleRelayAPI(request, response, relayState, auth) {
       delivered += agentResult.delivered ? 1 : 0;
     }
 
-    if (body.targetUserId) {
-      delivered += relayState.broadcastToUser(
-        body.targetUserId,
-        body.type ?? "relay:message",
-        body,
-      );
-    }
-
-    if (body.targetTaskId) {
-      delivered += relayState.broadcastToTask(
-        body.targetTaskId,
-        body.type ?? "relay:message",
-        body,
-      );
-    }
+      if (body.targetTaskId) {
+        delivered += relayState.broadcastToTask(
+          body.targetTaskId,
+          body.type ?? "relay:message",
+          body,
+        );
+      } else if (body.broadcastId) {
+        delivered += relayState.broadcastToBroadcast(
+          body.broadcastId,
+          body.type ?? "relay:message",
+          body,
+        );
+      } else if (body.targetUserId) {
+        delivered += relayState.broadcastToUser(
+          body.targetUserId,
+          body.type ?? "relay:message",
+          body,
+        );
+      }
 
     writeJson(response, 202, {
       accepted: true,
@@ -228,7 +232,7 @@ export async function handleRelayAPI(request, response, relayState, auth) {
     relayState.scheduleBroadcastWindowClose(
       body.broadcastId,
       () => {
-        relayState.broadcastToUser(body.userId, "bid:window_closed", {
+        relayState.broadcastToBroadcast(body.broadcastId, "bid:window_closed", {
           broadcastId: body.broadcastId,
         });
       },

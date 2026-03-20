@@ -3,7 +3,9 @@ import { getMessages, getTranslations, setRequestLocale } from "next-intl/server
 import { notFound } from "next/navigation";
 
 import { ActivationGuard } from "@/components/activation/activation-guard";
+import { MaintenanceBanner } from "@/components/layout/maintenance-banner";
 import { NetworkStatusBanner } from "@/components/layout/network-status-banner";
+import { PendingRatingModal } from "@/components/tasks/pending-rating-modal";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { routing } from "@/i18n/routing";
@@ -57,10 +59,12 @@ export default async function LocaleLayout({
     <NextIntlClientProvider locale={locale} messages={messages}>
       <div className="relative flex min-h-screen flex-col">
         <NetworkStatusBanner message={t("networkDisconnected")} />
+        <MaintenanceBanner locale={locale as "en" | "zh"} />
         <SiteHeader locale={locale} />
         <ActivationGuard isActivated={isActivated} locale={locale}>
           <div className="flex-1">{children}</div>
         </ActivationGuard>
+        <PendingRatingModal locale={locale as "en" | "zh"} />
         <SiteFooter />
       </div>
     </NextIntlClientProvider>

@@ -5,16 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: Request) {
   try {
-    const adminSession = await requireAdminSession().catch(async (error) => {
-      if (error instanceof Error && error.message === "mfa_required") {
-        const supabase = createAdminClient();
-        const { data } = await supabase.from("users").select("id").eq("role", "admin").limit(1).single();
-        return {
-          userId: data?.id ?? "",
-        };
-      }
-
-      throw error;
+    const adminSession = await requireAdminSession(undefined, {
+      requireTotpSession: false,
+      allowMissingTotpSetup: true,
     });
     const body = (await request.json()) as {
       secret?: string;

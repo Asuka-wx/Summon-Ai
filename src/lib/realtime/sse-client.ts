@@ -1,30 +1,17 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
+export async function createTaskEventSource(taskId: string) {
+  if (!taskId) {
+    return null;
+  }
 
-function getSseBaseUrl() {
-  return process.env.NEXT_PUBLIC_SSE_URL ?? "";
+  return new EventSource(`/api/v1/tasks/${encodeURIComponent(taskId)}/stream`);
 }
 
-export async function createTaskEventSource(taskId: string) {
-  const baseUrl = getSseBaseUrl();
-
-  if (!baseUrl) {
+export async function createBroadcastBidEventSource(broadcastId: string) {
+  if (!broadcastId) {
     return null;
   }
 
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    return null;
-  }
-
-  const url = new URL("/sse/connect", baseUrl);
-  url.searchParams.set("token", session.access_token);
-  url.searchParams.set("task_id", taskId);
-
-  return new EventSource(url.toString());
+  return new EventSource(`/api/v1/broadcasts/${encodeURIComponent(broadcastId)}/bids`);
 }

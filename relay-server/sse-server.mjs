@@ -4,6 +4,7 @@ export async function handleSSERequest(request, response, relayState, auth) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
   const token = url.searchParams.get("token") ?? "";
   const taskId = url.searchParams.get("task_id");
+  const broadcastId = url.searchParams.get("broadcast_id");
 
   let identity;
   try {
@@ -23,6 +24,7 @@ export async function handleSSERequest(request, response, relayState, auth) {
   relayState.registerSseConnection({
     userId: identity.userId,
     taskId,
+    broadcastId,
     response,
   });
 
@@ -33,19 +35,32 @@ export async function handleSSERequest(request, response, relayState, auth) {
       ok: true,
       user_id: identity.userId,
       task_id: taskId ?? null,
+      broadcast_id: broadcastId ?? null,
     },
     relayConfig.sseRetryMs,
+    relayState.nextSseEventId(
+      taskId ? `task:${taskId}` : broadcastId ? `broadcast:${broadcastId}` : `user:${identity.userId}`,
+    ),
   );
 
   const heartbeat = setInterval(() => {
-    relayState.writeSseEvent(response, "heartbeat", { ts: Date.now() });
-  }, relayConfig.heartbeatIntervalSeconds * 1000);
+    relayState.writeSseEvent(
+      response,
+      "heartbeat",
+      { ts: Date.now() },
+      undefined,
+      relayState.nextSseEventId(
+        taskId ? `task:${taskId}` : broadcastId ? `broadcast:${broadcastId}` : `user:${identity.userId}`,
+      ),
+    );
+  }, relayConfig.sseHeartbeatIntervalSeconds * 1000);
 
   request.on("close", () => {
     clearInterval(heartbeat);
     relayState.unregisterSseConnection({
       userId: identity.userId,
       taskId,
+      broadcastId,
       response,
     });
     response.end();

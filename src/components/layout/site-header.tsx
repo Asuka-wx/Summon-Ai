@@ -1,5 +1,6 @@
 import { useTranslations } from "next-intl";
 
+import { HeaderNotificationLink } from "@/components/layout/header-notification-link";
 import { Link } from "@/i18n/navigation";
 
 type SiteHeaderProps = {
@@ -8,10 +9,11 @@ type SiteHeaderProps = {
 
 export function SiteHeader({ locale }: SiteHeaderProps) {
   const t = useTranslations("common");
-  const sellerDashboardLabel = locale === "zh" ? "供给侧后台" : "Seller";
+  const sellerDashboardLabel = locale === "zh" ? "供给后台" : "Dashboard";
+  const tasksLabel = locale === "zh" ? "我的任务" : "My Tasks";
   const chineseLabel = "中文";
-  const agentsLabel = locale === "zh" ? "Agent 广场" : "Agents";
-  const leaderboardsLabel = locale === "zh" ? "排行榜" : "Leaderboards";
+  const agentsLabel = locale === "zh" ? "Agent 展厅" : "Showcase";
+  const leaderboardsLabel = locale === "zh" ? "排行榜" : "Leaderboard";
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl">
@@ -37,33 +39,34 @@ export function SiteHeader({ locale }: SiteHeaderProps) {
             {t("navigation.home")}
           </Link>
           <Link
-            href="/upload-lab"
-            locale={locale}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            {t("navigation.uploadLab")}
-          </Link>
-          <Link
-            href="/agents"
+            href="/showcase"
             locale={locale}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             {agentsLabel}
           </Link>
           <Link
-            href="/leaderboards"
+            href="/leaderboard"
             locale={locale}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             {leaderboardsLabel}
           </Link>
           <Link
-            href="/seller/dashboard"
+            href="/my/tasks"
+            locale={locale}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            {tasksLabel}
+          </Link>
+          <Link
+            href="/dashboard"
             locale={locale}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             {sellerDashboardLabel}
           </Link>
+          <HeaderNotificationLink locale={locale} />
           <div className="flex items-center gap-2 rounded-full border border-border bg-card/80 px-2 py-1 text-xs">
             <Link
               href="/"

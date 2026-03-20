@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { routing } from "@/i18n/routing";
 import { activationGuard } from "@/middleware/activation-guard";
+import { adminGuard } from "@/middleware/admin-guard";
 
 const intlMiddleware = createMiddleware(routing);
 
@@ -12,6 +13,11 @@ export default async function middleware(request: NextRequest) {
 
   if (!isApiRequest && response.headers.get("location")) {
     return response;
+  }
+
+  const adminResult = await adminGuard(request, response);
+  if (adminResult) {
+    return adminResult;
   }
 
   const activationResult = await activationGuard(request, response);

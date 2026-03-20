@@ -133,14 +133,23 @@ export async function buildConversationHistory(
 export async function getDecryptedTaskMessages(
   taskId: string,
   supabase: SupabaseClient = createAdminClient(),
+  options?: {
+    afterRound?: number;
+  },
 ) {
   const taskKey = await getTaskEncryptionKey(taskId, supabase);
-  const { data, error } = await supabase
+  let query = supabase
     .from("task_messages")
     .select("id, round_number, role, content, is_free, created_at")
     .eq("task_id", taskId)
     .order("round_number", { ascending: true })
     .order("created_at", { ascending: true });
+
+  if (typeof options?.afterRound === "number" && options.afterRound >= 0) {
+    query = query.gt("round_number", options.afterRound);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Failed to load encrypted task messages for task ${taskId}: ${error.message}`);

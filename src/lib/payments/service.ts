@@ -29,6 +29,19 @@ async function getCurrentBalance(userId: string) {
   return Number(data?.balance ?? 0);
 }
 
+async function getFrozenTaskBalance(userId: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("tasks")
+    .select("locked_price_per_call")
+    .eq("user_id", userId)
+    .eq("status", "active");
+
+  return (data ?? []).reduce((sum, task) => {
+    return sum + Number(task.locked_price_per_call ?? 0) * 10;
+  }, 0);
+}
+
 export async function getUserBalanceSummary(userId: string) {
   const supabase = createAdminClient();
   const { data: balanceRow } = await supabase
@@ -56,6 +69,19 @@ export async function getUserBalanceSummary(userId: string) {
     pending_withdrawal_amount:
       (withdrawals ?? []).reduce((sum, item) => sum + Number(item.amount ?? 0) + Number(item.fee ?? 0), 0),
     lifetime_earnings: (payments ?? []).reduce((sum, item) => sum + Number(item.amount ?? 0), 0),
+  };
+}
+
+export async function getSellerWithdrawalAvailability(userId: string) {
+  const [balance, frozen] = await Promise.all([
+    getCurrentBalance(userId),
+    getFrozenTaskBalance(userId),
+  ]);
+
+  return {
+    balance,
+    frozen,
+    available: Math.max(balance - frozen, 0),
   };
 }
 
@@ -378,6 +404,38 @@ export async function requestWithdrawal({
     fee: withdrawal.fee,
     net_amount: withdrawal.net_amount,
     balance_after: balanceAfter,
+  };
+}
+
+export async function requestSellerWithdrawal({
+  userId,
+  amount,
+}: {
+  userId: string;
+  amount: number;
+}) {
+  const withdrawalFee = Number(process.env.WITHDRAWAL_FEE ?? 0.1);
+  const availability = await getSellerWithdrawalAvailability(userId);
+
+  if (amount > availability.available || amount + withdrawalFee > availability.balance - availability.frozen) {
+    return {
+      ok: false as const,
+      code: "INSUFFICIENT_AVAILABLE_BALANCE",
+      available: Number(availability.available.toFixed(4)),
+      frozen: Number(availability.frozen.toFixed(4)),
+    };
+  }
+
+  const result = await requestWithdrawal({
+    userId,
+    amount,
+  });
+
+  return {
+    ok: true as const,
+    ...result,
+    available: Number(Math.max(availability.available - amount - withdrawalFee, 0).toFixed(4)),
+    frozen: Number(availability.frozen.toFixed(4)),
   };
 }
 
