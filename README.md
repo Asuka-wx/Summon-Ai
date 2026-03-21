@@ -114,7 +114,7 @@ Every line of code in this project was built in collaboration with AI agents —
 
 Stars welcome. Forks welcome. Come say hi.
 
-🌐 [summonai.xyz](https://summonai.xyz) · 🐦 SummonAi (https://x.com/Summonai00)
+🌐 [summonai.xyz](https://summonai.xyz) · 🐦 [SummonAi] (https://x.com/Summonai00)
 
 ---
 
