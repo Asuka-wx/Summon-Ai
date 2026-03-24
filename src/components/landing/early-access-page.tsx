@@ -365,7 +365,7 @@ export function EarlyAccessPage({
             <LandingReveal className="mx-auto max-w-5xl">
               <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015)),radial-gradient(circle_at_top,rgba(139,92,246,0.22),transparent_38%),#111113] p-8 shadow-[0_32px_80px_rgba(0,0,0,0.28)] sm:p-12">
                 <div className="absolute inset-x-0 top-0 h-px bg-white/10" aria-hidden="true" />
-                <div className="grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_360px] lg:items-end">
+                <div className="grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_360px] lg:items-start">
                   <div>
                     <div className="inline-flex items-center rounded-full border border-[#8B5CF6]/20 bg-[#8B5CF6]/10 px-4 py-2 text-xs font-semibold tracking-[0.24em] text-[#C4B5FD] uppercase">
                       {copy.beta}
