@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Single Frame Review</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 20px;
+        background: #0b0b0f;
+        color: #f4f4f5;
+      }
+      .wrap {
+        display: grid;
+        gap: 12px;
+      }
+      .meta {
+        font-size: 18px;
+        font-weight: 700;
+        color: #c4b5fd;
+      }
+      canvas {
+        width: 100%;
+        height: auto;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #111113;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="meta" class="meta">Loading…</div>
+      <canvas id="frame"></canvas>
+    </div>
+    <video id="video" muted playsinline preload="auto" crossorigin="anonymous"></video>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const time = Number(params.get("t") || "0");
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("frame");
+      const meta = document.getElementById("meta");
+      video.src = "./tmp-video-review/review.mp4";
+
+      const waitFor = (eventName) =>
+        new Promise((resolve) => video.addEventListener(eventName, resolve, { once: true }));
+
+      async function ensureMetadata() {
+        if (video.readyState >= 1) return;
+        await waitFor("loadedmetadata");
+      }
+
+      async function main() {
+        await ensureMetadata();
+        const safeTime = Math.min(time, Math.max(0, video.duration - 0.05));
+        video.currentTime = safeTime;
+        await waitFor("seeked");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+        meta.textContent = `${safeTime.toFixed(2)}s · ${video.videoWidth}×${video.videoHeight}`;
+      }
+
+      main().catch((error) => {
+        meta.textContent = `Failed: ${error.message}`;
+      });
+    </script>
+  </body>
+</html>

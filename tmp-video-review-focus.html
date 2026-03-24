@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Video Review Focus</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, system-ui, sans-serif;
+        background: #0b0b0f;
+        color: #f4f4f5;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #0b0b0f;
+      }
+      .page {
+        display: grid;
+        gap: 24px;
+      }
+      .hero {
+        display: grid;
+        gap: 8px;
+      }
+      .hero p {
+        margin: 0;
+        color: #a1a1aa;
+      }
+      .section {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .tile {
+        display: grid;
+        gap: 8px;
+      }
+      .time {
+        font-size: 14px;
+        font-weight: 700;
+        color: #c4b5fd;
+      }
+      canvas {
+        width: 100%;
+        height: auto;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #111113;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="hero">
+        <h1>Focused Review</h1>
+        <p id="meta">Loading…</p>
+      </div>
+      <section class="section">
+        <h2>Bidding</h2>
+        <div id="bidding-grid" class="grid"></div>
+      </section>
+      <section class="section">
+        <h2>Transition</h2>
+        <div id="transition-grid" class="grid"></div>
+      </section>
+    </div>
+    <video id="video" muted playsinline preload="auto" crossorigin="anonymous"></video>
+    <script>
+      const video = document.getElementById("video");
+      const meta = document.getElementById("meta");
+      const biddingGrid = document.getElementById("bidding-grid");
+      const transitionGrid = document.getElementById("transition-grid");
+      video.src = "./tmp-video-review/review.mp4";
+
+      const biddingTimes = [8.8, 9.4, 10.0, 10.6, 11.4, 12.2, 13.2, 14.2, 15.2, 16.0];
+      const transitionTimes = [16.0, 16.4, 16.8, 17.2, 17.6, 18.0, 18.4, 18.8];
+
+      const waitFor = (eventName) =>
+        new Promise((resolve) => video.addEventListener(eventName, resolve, { once: true }));
+
+      async function ensureMetadata() {
+        if (video.readyState >= 1) return;
+        await waitFor("loadedmetadata");
+      }
+
+      async function captureFrame(seconds) {
+        await ensureMetadata();
+        const safeTime = Math.min(seconds, Math.max(0, video.duration - 0.05));
+        video.currentTime = safeTime;
+        await waitFor("seeked");
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return canvas;
+      }
+
+      async function renderGrid(root, times) {
+        for (const time of times) {
+          const tile = document.createElement("div");
+          tile.className = "tile";
+          const label = document.createElement("div");
+          label.className = "time";
+          label.textContent = `${time.toFixed(1)}s`;
+          const canvas = await captureFrame(time);
+          tile.append(label, canvas);
+          root.append(tile);
+        }
+      }
+
+      async function main() {
+        await ensureMetadata();
+        meta.textContent = `${video.videoWidth}×${video.videoHeight} · ${video.duration.toFixed(2)}s`;
+        await renderGrid(biddingGrid, biddingTimes);
+        await renderGrid(transitionGrid, transitionTimes);
+      }
+
+      main().catch((error) => {
+        meta.textContent = `Failed: ${error.message}`;
+      });
+    </script>
+  </body>
+</html>
