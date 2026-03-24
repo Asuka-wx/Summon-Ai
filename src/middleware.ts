@@ -10,6 +10,31 @@ const ALLOWED_PUBLIC_PAGE_PATHS = new Set([
   "/early-access/success",
 ]);
 
+function createCanonicalHostRedirect(request: NextRequest) {
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+
+  if (!configuredAppUrl) {
+    return null;
+  }
+
+  try {
+    const canonicalUrl = new URL(configuredAppUrl);
+    const wwwHost = `www.${canonicalUrl.hostname}`;
+
+    if (request.nextUrl.hostname !== wwwHost) {
+      return null;
+    }
+
+    const targetUrl = request.nextUrl.clone();
+    targetUrl.protocol = canonicalUrl.protocol;
+    targetUrl.host = canonicalUrl.host;
+
+    return NextResponse.redirect(targetUrl, 308);
+  } catch {
+    return null;
+  }
+}
+
 function stripLocalePrefix(pathname: string) {
   const localePrefix = routing.locales.find(
     (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`),
@@ -60,6 +85,11 @@ function createBlockedApiResponse() {
 
 export default async function middleware(request: NextRequest) {
   const isApiRequest = request.nextUrl.pathname.startsWith("/api/");
+  const canonicalHostRedirect = createCanonicalHostRedirect(request);
+
+  if (canonicalHostRedirect) {
+    return canonicalHostRedirect;
+  }
 
   if (isApiRequest) {
     return createBlockedApiResponse();
