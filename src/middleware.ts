@@ -2,27 +2,77 @@ import createMiddleware from "next-intl/middleware";
 import { NextRequest, NextResponse } from "next/server";
 
 import { routing } from "@/i18n/routing";
-import { activationGuard } from "@/middleware/activation-guard";
-import { adminGuard } from "@/middleware/admin-guard";
 
 const intlMiddleware = createMiddleware(routing);
+const ALLOWED_PUBLIC_PAGE_PATHS = new Set([
+  "/",
+  "/early-access",
+  "/early-access/success",
+]);
+
+function stripLocalePrefix(pathname: string) {
+  const localePrefix = routing.locales.find(
+    (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`),
+  );
+
+  if (!localePrefix) {
+    return {
+      locale: routing.defaultLocale,
+      pathname,
+      hasLocalePrefix: false,
+    };
+  }
+
+  const stripped = pathname.replace(`/${localePrefix}`, "") || "/";
+
+  return {
+    locale: localePrefix,
+    pathname: stripped,
+    hasLocalePrefix: true,
+  };
+}
+
+function isAllowedPublicPage(pathname: string) {
+  if (pathname === "/") {
+    return true;
+  }
+
+  const normalized = stripLocalePrefix(pathname);
+
+  return normalized.hasLocalePrefix && ALLOWED_PUBLIC_PAGE_PATHS.has(normalized.pathname);
+}
+
+function createPageRedirect(request: NextRequest) {
+  const normalized = stripLocalePrefix(request.nextUrl.pathname);
+
+  return NextResponse.redirect(new URL(`/${normalized.locale}`, request.url));
+}
+
+function createBlockedApiResponse() {
+  return NextResponse.json(
+    {
+      code: "EARLY_ACCESS_ONLY",
+      message: "This deployment only exposes the landing and early access pages.",
+    },
+    { status: 404 },
+  );
+}
 
 export default async function middleware(request: NextRequest) {
   const isApiRequest = request.nextUrl.pathname.startsWith("/api/");
-  const response = isApiRequest ? NextResponse.next() : intlMiddleware(request);
+
+  if (isApiRequest) {
+    return createBlockedApiResponse();
+  }
+
+  if (!isAllowedPublicPage(request.nextUrl.pathname)) {
+    return createPageRedirect(request);
+  }
+
+  const response = intlMiddleware(request);
 
   if (!isApiRequest && response.headers.get("location")) {
     return response;
-  }
-
-  const adminResult = await adminGuard(request, response);
-  if (adminResult) {
-    return adminResult;
-  }
-
-  const activationResult = await activationGuard(request, response);
-  if (activationResult) {
-    return activationResult;
   }
 
   return response;
