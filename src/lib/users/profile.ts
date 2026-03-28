@@ -1,5 +1,6 @@
 import { getUserBalanceSummary } from "@/lib/payments/service";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 type UserRow = {
   id: string;
@@ -38,9 +39,101 @@ function normalizeUserProfile(user: UserRow, balance: Awaited<ReturnType<typeof 
   };
 }
 
+async function buildFallbackUserProfile(
+  userId: string,
+  balance: Awaited<ReturnType<typeof getUserBalanceSummary>>,
+) {
+  const authClient = await createServerClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+
+  if (!user || user.id !== userId) {
+    throw new Error("unauthorized");
+  }
+
+  const rawDisplayName =
+    (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name) ||
+    (typeof user.user_metadata?.name === "string" && user.user_metadata.name) ||
+    (typeof user.user_metadata?.preferred_username === "string" &&
+      user.user_metadata.preferred_username) ||
+    user.email?.split("@")[0] ||
+    "SummonAI User";
+
+  return {
+    id: user.id,
+    display_name: rawDisplayName,
+    avatar_url: typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : null,
+    email: user.email ?? null,
+    bio: null,
+    locale: "en",
+    role: "member",
+    is_frozen: false,
+    twitter_handle: null,
+    github_handle: null,
+    payout_wallet: null,
+    payout_chain: "base",
+    created_at: user.created_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    balance,
+  };
+}
+
+export async function ensureUserAccountRow(userId: string) {
+  const authClient = await createServerClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+
+  if (!user || user.id !== userId) {
+    throw new Error("unauthorized");
+  }
+
+  const supabase = createAdminClient();
+  const now = new Date().toISOString();
+  const metadataRole =
+    (typeof user.app_metadata?.role === "string" && user.app_metadata.role) ||
+    (typeof user.user_metadata?.role === "string" && user.user_metadata.role) ||
+    "member";
+  const displayName =
+    (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name) ||
+    (typeof user.user_metadata?.name === "string" && user.user_metadata.name) ||
+    (typeof user.user_metadata?.preferred_username === "string" &&
+      user.user_metadata.preferred_username) ||
+    user.email?.split("@")[0] ||
+    "SummonAI User";
+
+  const { error } = await supabase.from("users").upsert(
+    {
+      id: user.id,
+      email: user.email ?? null,
+      display_name: displayName,
+      avatar_url:
+        typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : null,
+      bio: null,
+      locale: "en",
+      role: metadataRole,
+      is_frozen: false,
+      is_activated: metadataRole === "admin",
+      payout_wallet: null,
+      payout_chain: "base",
+      updated_at: now,
+      created_at: now,
+    },
+    {
+      onConflict: "id",
+      ignoreDuplicates: false,
+    },
+  );
+
+  if (error) {
+    throw new Error("unauthorized");
+  }
+}
+
 export async function getCurrentUserAccount(userId: string) {
   const supabase = createAdminClient();
-  const [{ data: user, error }, balance] = await Promise.all([
+  const [{ data: initialUser, error: initialError }, balance] = await Promise.all([
     supabase
       .from("users")
       .select(
@@ -51,8 +144,26 @@ export async function getCurrentUserAccount(userId: string) {
     getUserBalanceSummary(userId),
   ]);
 
+  let user = initialUser;
+  let error = initialError;
+
   if (error || !user) {
-    throw new Error("unauthorized");
+    await ensureUserAccountRow(userId);
+
+    const result = await supabase
+      .from("users")
+      .select(
+        "id, display_name, avatar_url, email, bio, locale, role, is_frozen, twitter_handle, github_handle, payout_wallet, payout_chain, created_at, updated_at",
+      )
+      .eq("id", userId)
+      .maybeSingle();
+
+    user = result.data;
+    error = result.error;
+
+    if (error || !user) {
+      return buildFallbackUserProfile(userId, balance);
+    }
   }
 
   return normalizeUserProfile(user as UserRow, balance);

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { SessionExitButton } from "@/components/auth/session-exit-button";
+import { AuthMethodsPanel } from "@/components/settings/auth-methods-panel";
 import { Button } from "@/components/ui/button";
 
 type AccountSettingsPanelProps = {
@@ -16,6 +18,7 @@ type AccountSettingsPanelProps = {
     payout_wallet: string | null;
   };
   badgeCount: number;
+  limitedForInactive?: boolean;
 };
 
 function getCopy(locale: "en" | "zh") {
@@ -31,20 +34,27 @@ function getCopy(locale: "en" | "zh") {
       payoutDescription: "修改提现地址会进入 48 小时冷静期。",
       payoutWallet: "钱包地址",
       saveWallet: "更新钱包",
-      socialTitle: "社交绑定",
-      socialDescription: "绑定用于提升可信度，解绑会受到冷静期和次数限制。",
+      socialTitle: "公开资料绑定",
+      socialDescription: "这些绑定主要用于提升可信度展示，不等同于登录方式。",
       unbindTwitter: "解绑 Twitter",
       unbindGithub: "解绑 GitHub",
       exportsTitle: "数据与账户",
       exportData: "导出数据",
       requestData: "提交数据请求",
       deleteAccount: "注销账户",
+      signoutTitle: "会话管理",
+      signoutDescription: "如果你需要换账号、换邮箱或换登录方式，可以先退出当前会话。",
+      limitedTitle: "当前账户尚未激活",
+      limitedDescription:
+        "在邀请码激活前，你可以先管理资料、登录方式和当前会话；钱包、公开资料绑定和账户级导出功能会在激活后开放。",
       deleting: "处理中...",
       requesting: "提交中...",
+      saving: "保存中...",
       saved: "已更新。",
       failed: "操作失败，请稍后重试。",
       noHandle: "未绑定",
       badges: "已获得徽章",
+      deleteConfirm: "确认注销当前账户？",
     };
   }
 
@@ -59,20 +69,27 @@ function getCopy(locale: "en" | "zh") {
     payoutDescription: "Updating the payout wallet triggers a 48-hour cooldown.",
     payoutWallet: "Wallet address",
     saveWallet: "Update wallet",
-    socialTitle: "Social bindings",
-    socialDescription: "Bindings improve trust signals. Unbinding is protected by cooldown and limits.",
+    socialTitle: "Public profile bindings",
+    socialDescription: "These bindings are for trust signals and public profile display, not sign-in.",
     unbindTwitter: "Unbind Twitter",
     unbindGithub: "Unbind GitHub",
     exportsTitle: "Data and account",
     exportData: "Export data",
     requestData: "Create data request",
     deleteAccount: "Delete account",
+    signoutTitle: "Session management",
+    signoutDescription: "Need another account, email, or sign-in method? Sign out first and switch cleanly.",
+    limitedTitle: "This account is not activated yet",
+    limitedDescription:
+      "Before activation, you can still manage profile basics, sign-in methods, and the current session. Wallet, public bindings, and export controls unlock after activation.",
     deleting: "Working...",
     requesting: "Submitting...",
+    saving: "Saving...",
     saved: "Updated successfully.",
     failed: "Action failed. Please try again.",
     noHandle: "Not connected",
     badges: "Badges earned",
+    deleteConfirm: "Delete this account?",
   };
 }
 
@@ -80,6 +97,7 @@ export function AccountSettingsPanel({
   locale,
   initialProfile,
   badgeCount,
+  limitedForInactive = false,
 }: AccountSettingsPanelProps) {
   const copy = getCopy(locale);
   const [profile, setProfile] = useState({
@@ -202,7 +220,7 @@ export function AccountSettingsPanel({
   }
 
   async function deleteAccount() {
-    if (!window.confirm(locale === "zh" ? "确认注销当前账户？" : "Delete this account?")) {
+    if (!window.confirm(copy.deleteConfirm)) {
       return;
     }
 
@@ -229,6 +247,17 @@ export function AccountSettingsPanel({
 
   return (
     <div className="grid gap-6">
+      {limitedForInactive ? (
+        <section className="rounded-[1.75rem] border border-primary/20 bg-primary/5 p-6 shadow-lg shadow-primary/5">
+          <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
+            {copy.limitedTitle}
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-muted-foreground">
+            {copy.limitedDescription}
+          </p>
+        </section>
+      ) : null}
+
       <section className="rounded-[1.75rem] border border-border/70 bg-card/80 p-6 shadow-lg shadow-primary/5">
         <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
           {copy.profileTitle}
@@ -239,105 +268,131 @@ export function AccountSettingsPanel({
         <div className="mt-6 grid gap-4">
           <input
             className="rounded-2xl border border-border bg-background px-4 py-3 text-sm"
-            placeholder={copy.displayName}
-            value={profile.display_name}
             onChange={(event) =>
               setProfile((current) => ({ ...current, display_name: event.target.value }))
             }
+            placeholder={copy.displayName}
+            value={profile.display_name}
           />
           <textarea
             className="min-h-28 rounded-2xl border border-border bg-background px-4 py-3 text-sm"
-            placeholder={copy.bio}
-            value={profile.bio}
             onChange={(event) =>
               setProfile((current) => ({ ...current, bio: event.target.value }))
             }
+            placeholder={copy.bio}
+            value={profile.bio}
           />
           <select
+            aria-label={copy.language}
             className="rounded-2xl border border-border bg-background px-4 py-3 text-sm"
-            value={profile.locale}
             onChange={(event) =>
               setProfile((current) => ({ ...current, locale: event.target.value as "en" | "zh" }))
             }
+            value={profile.locale}
           >
             <option value="en">English</option>
             <option value="zh">中文</option>
           </select>
-          <Button disabled={isSavingProfile} type="button" onClick={() => void saveProfile()}>
-            {isSavingProfile ? copy.requesting : copy.saveProfile}
+          <Button disabled={isSavingProfile} onClick={() => void saveProfile()} type="button">
+            {isSavingProfile ? copy.saving : copy.saveProfile}
           </Button>
         </div>
       </section>
 
+      <AuthMethodsPanel
+        email={initialProfile.email}
+        locale={locale}
+        returnHref={`/${locale}/my/settings`}
+      />
+
+      {limitedForInactive ? null : (
+        <>
+          <section className="rounded-[1.75rem] border border-border/70 bg-card/80 p-6 shadow-lg shadow-primary/5">
+            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
+              {copy.payoutTitle}
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              {copy.payoutDescription}
+            </p>
+            <div className="mt-6 grid gap-4">
+              <input
+                className="rounded-2xl border border-border bg-background px-4 py-3 text-sm"
+                onChange={(event) => setPayoutWallet(event.target.value)}
+                placeholder={copy.payoutWallet}
+                value={payoutWallet}
+              />
+              <Button disabled={isSavingWallet} onClick={() => void saveWallet()} type="button">
+                {isSavingWallet ? copy.saving : copy.saveWallet}
+              </Button>
+            </div>
+          </section>
+
+          <section className="rounded-[1.75rem] border border-border/70 bg-card/80 p-6 shadow-lg shadow-primary/5">
+            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
+              {copy.socialTitle}
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              {copy.socialDescription}
+            </p>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-3xl border border-border/70 bg-background/75 p-5">
+                <p className="text-sm text-muted-foreground">
+                  Twitter: {initialProfile.twitter_handle ?? copy.noHandle}
+                </p>
+                <Button className="mt-4" onClick={() => void unbind("twitter")} type="button" variant="outline">
+                  {copy.unbindTwitter}
+                </Button>
+              </div>
+              <div className="rounded-3xl border border-border/70 bg-background/75 p-5">
+                <p className="text-sm text-muted-foreground">
+                  GitHub: {initialProfile.github_handle ?? copy.noHandle}
+                </p>
+                <Button className="mt-4" onClick={() => void unbind("github")} type="button" variant="outline">
+                  {copy.unbindGithub}
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[1.75rem] border border-border/70 bg-card/80 p-6 shadow-lg shadow-primary/5">
+            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
+              {copy.exportsTitle}
+            </h2>
+            <p className="mt-4 text-sm text-muted-foreground">
+              {copy.badges}: {badgeCount}
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button
+                onClick={() => window.location.assign("/api/v1/users/me/export")}
+                type="button"
+                variant="outline"
+              >
+                {copy.exportData}
+              </Button>
+              <Button disabled={isRequestingData} onClick={() => void requestData()} type="button" variant="outline">
+                {isRequestingData ? copy.requesting : copy.requestData}
+              </Button>
+              <Button disabled={isDeleting} onClick={() => void deleteAccount()} type="button" variant="outline">
+                {isDeleting ? copy.deleting : copy.deleteAccount}
+              </Button>
+            </div>
+          </section>
+        </>
+      )}
+
       <section className="rounded-[1.75rem] border border-border/70 bg-card/80 p-6 shadow-lg shadow-primary/5">
         <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
-          {copy.payoutTitle}
+          {copy.signoutTitle}
         </h2>
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
-          {copy.payoutDescription}
+          {copy.signoutDescription}
         </p>
-        <div className="mt-6 grid gap-4">
-          <input
-            className="rounded-2xl border border-border bg-background px-4 py-3 text-sm"
-            placeholder={copy.payoutWallet}
-            value={payoutWallet}
-            onChange={(event) => setPayoutWallet(event.target.value)}
-          />
-          <Button disabled={isSavingWallet} type="button" onClick={() => void saveWallet()}>
-            {isSavingWallet ? copy.requesting : copy.saveWallet}
-          </Button>
-        </div>
-      </section>
-
-      <section className="rounded-[1.75rem] border border-border/70 bg-card/80 p-6 shadow-lg shadow-primary/5">
-        <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
-          {copy.socialTitle}
-        </h2>
-        <p className="mt-3 text-sm leading-7 text-muted-foreground">
-          {copy.socialDescription}
-        </p>
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <div className="rounded-3xl border border-border/70 bg-background/75 p-5">
-            <p className="text-sm text-muted-foreground">
-              Twitter: {initialProfile.twitter_handle ?? copy.noHandle}
-            </p>
-            <Button className="mt-4" type="button" variant="outline" onClick={() => void unbind("twitter")}>
-              {copy.unbindTwitter}
-            </Button>
-          </div>
-          <div className="rounded-3xl border border-border/70 bg-background/75 p-5">
-            <p className="text-sm text-muted-foreground">
-              GitHub: {initialProfile.github_handle ?? copy.noHandle}
-            </p>
-            <Button className="mt-4" type="button" variant="outline" onClick={() => void unbind("github")}>
-              {copy.unbindGithub}
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-[1.75rem] border border-border/70 bg-card/80 p-6 shadow-lg shadow-primary/5">
-        <h2 className="text-2xl font-semibold tracking-[-0.03em] text-foreground">
-          {copy.exportsTitle}
-        </h2>
-        <p className="mt-4 text-sm text-muted-foreground">
-          {copy.badges}: {badgeCount}
-        </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => window.location.assign("/api/v1/users/me/export")}
-          >
-            {copy.exportData}
-          </Button>
-          <Button disabled={isRequestingData} type="button" variant="outline" onClick={() => void requestData()}>
-            {isRequestingData ? copy.requesting : copy.requestData}
-          </Button>
-          <Button disabled={isDeleting} type="button" variant="outline" onClick={() => void deleteAccount()}>
-            {isDeleting ? copy.deleting : copy.deleteAccount}
-          </Button>
-        </div>
+        <SessionExitButton
+          className="mt-6 h-11 rounded-2xl border border-border bg-background px-4 text-sm text-foreground hover:bg-accent"
+          locale={locale}
+          mode="signout"
+          nextHref={`/${locale}/my/settings`}
+        />
       </section>
 
       {message ? (

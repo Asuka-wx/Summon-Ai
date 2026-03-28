@@ -20,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang={siteConfig.defaultLocale} suppressHydrationWarning>
-      <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+      <body className="min-h-screen bg-[#09090B] [background-image:none] font-sans text-foreground antialiased">
         {children}
       </body>
     </html>

@@ -9,6 +9,20 @@ const ALLOWED_PUBLIC_PAGE_PATHS = new Set([
   "/early-access",
   "/early-access/success",
 ]);
+const ALLOWED_PUBLIC_API_PATHS = new Set([
+  "/api/v1/integrations/tally/early-access",
+]);
+
+function isLocalDevelopmentRequest(request: NextRequest) {
+  const { hostname } = request.nextUrl;
+
+  return (
+    process.env.NODE_ENV === "development" ||
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1"
+  );
+}
 
 function createCanonicalHostRedirect(request: NextRequest) {
   const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -85,6 +99,16 @@ function createBlockedApiResponse() {
 
 export default async function middleware(request: NextRequest) {
   const isApiRequest = request.nextUrl.pathname.startsWith("/api/");
+  const isAllowedPublicApiPath = ALLOWED_PUBLIC_API_PATHS.has(request.nextUrl.pathname);
+
+  if (isLocalDevelopmentRequest(request)) {
+    if (isApiRequest) {
+      return NextResponse.next();
+    }
+
+    return intlMiddleware(request);
+  }
+
   const canonicalHostRedirect = createCanonicalHostRedirect(request);
 
   if (canonicalHostRedirect) {
@@ -92,6 +116,10 @@ export default async function middleware(request: NextRequest) {
   }
 
   if (isApiRequest) {
+    if (isAllowedPublicApiPath) {
+      return NextResponse.next();
+    }
+
     return createBlockedApiResponse();
   }
 
