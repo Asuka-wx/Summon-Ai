@@ -5,12 +5,16 @@ import { usePathname, useRouter } from "next/navigation";
 
 type ActivationGuardProps = {
   isActivated: boolean | null;
+  isAdmin: boolean;
+  requiresActivation: boolean;
   locale: "en" | "zh";
   children: React.ReactNode;
 };
 
 export function ActivationGuard({
   isActivated,
+  isAdmin,
+  requiresActivation,
   locale,
   children,
 }: ActivationGuardProps) {
@@ -19,20 +23,23 @@ export function ActivationGuard({
 
   const isWhitelistedPath =
     pathname === `/${locale}` ||
+    pathname === `/${locale}/app` ||
     pathname === `/${locale}/activate` ||
     pathname.startsWith(`/${locale}/activate/`) ||
+    pathname === `/${locale}/my/settings` ||
+    pathname.startsWith(`/${locale}/my/settings/`) ||
     pathname === `/${locale}/agents` ||
     pathname.startsWith(`/${locale}/agents/`) ||
     pathname === `/${locale}/waitlist` ||
     pathname.startsWith(`/${locale}/waitlist/`);
 
   useEffect(() => {
-    if (isActivated === false && !isWhitelistedPath) {
+    if (!isAdmin && requiresActivation && isActivated === false && !isWhitelistedPath) {
       router.replace(`/${locale}/activate?redirect=${encodeURIComponent(pathname)}`);
     }
-  }, [isActivated, isWhitelistedPath, locale, pathname, router]);
+  }, [isActivated, isAdmin, isWhitelistedPath, locale, pathname, requiresActivation, router]);
 
-  if (isActivated === false && !isWhitelistedPath) {
+  if (!isAdmin && requiresActivation && isActivated === false && !isWhitelistedPath) {
     return null;
   }
 

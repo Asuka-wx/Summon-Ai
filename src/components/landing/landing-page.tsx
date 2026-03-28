@@ -1,10 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   BookOpen,
   Check,
+  ChevronDown,
   Github,
   RefreshCw,
   Shield,
@@ -911,6 +912,10 @@ function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function getPhaseElapsed(elapsedMs: number, start: number, duration: number) {
   return Math.max(0, Math.min(duration, elapsedMs - start));
 }
@@ -1023,6 +1028,7 @@ function getCopy(locale: "en" | "zh") {
       heroAccent: "找专家。",
       heroSubtitle: "专业领域 AI Agent 实时竞标平台",
       apply: "申请抢先体验",
+      scrollHint: "继续下滑，了解更多",
       demandPrimary: "你的专业领域，值得",
       demandAccent: "专业 Agent。",
       demandSubtitle: "说出需求，Agent 主动竞标，20 秒内开始。",
@@ -1083,6 +1089,7 @@ function getCopy(locale: "en" | "zh") {
     heroAccent: "Find experts.",
     heroSubtitle: "A realtime bidding platform for domain-specific AI agents",
     apply: "Apply for Early Access",
+    scrollHint: "Scroll to explore",
     demandPrimary: "Your domain deserves ",
     demandAccent: "specialist agents.",
     demandSubtitle: "Describe the work, let specialists bid, and start within 20 seconds.",
@@ -1237,18 +1244,32 @@ function ProductDemo({ locale }: { locale: "en" | "zh" }) {
   const coverageReelLocked = categorySelected;
   const composeContextVisible = composeMs > 220;
   const promptCharacters = Array.from(copy.prompt);
+  const promptTypingInterval =
+    promptCharacters.length > 0
+      ? clamp(
+          (DEMO_PHASES.compose.duration - 1_140) / promptCharacters.length,
+          44,
+          82,
+        )
+      : 82;
   const promptCharacterCount = Math.min(
     promptCharacters.length,
-    Math.floor(composeMs / 82),
+    Math.floor(composeMs / promptTypingInterval),
   );
   const typedPrompt = promptCharacters.slice(0, promptCharacterCount).join("");
   const promptTypingProgress =
     promptCharacters.length > 0 ? promptCharacterCount / promptCharacters.length : 1;
+  const promptTypingCompleteAt = promptCharacters.length * promptTypingInterval;
   const composeFooterVisible = composeMs > 1_180;
   const publishButtonVisible = promptTypingProgress > 0.32 && composeMs > 2_500;
-  const publishButtonClicking = composeMs > 5_760 && composeMs < 6_120;
+  const publishButtonClickStart = Math.min(
+    DEMO_PHASES.compose.duration - 720,
+    Math.max(5_760, promptTypingCompleteAt + 360),
+  );
+  const publishButtonClicking =
+    composeMs > publishButtonClickStart && composeMs < publishButtonClickStart + 360;
   const publishButtonLoading =
-    composeMs >= 6_120 && composeMs < DEMO_PHASES.compose.duration;
+    composeMs >= publishButtonClickStart + 360 && composeMs < DEMO_PHASES.compose.duration;
 
   const bidCountdownSteps = [20, 18, 16, 14, 12, 10, 8, 6];
   const bidCountdownStepMs = DEMO_PHASES.bids.duration / bidCountdownSteps.length;
@@ -1340,22 +1361,34 @@ function ProductDemo({ locale }: { locale: "en" | "zh" }) {
   const confirmUserVisible = roomMs > 1_220;
   const confirmFindingsVisible = roomMs > 2_320;
   const confirmDecisionVisible = roomMs > 3_280 && roomMs < 5_680;
-  const artifactOneVisible = roomMs > 6_880;
-  const artifactTwoVisible = roomMs > 9_280;
-  const artifactThreeVisible = roomMs > 10_980;
   const streamedFindingCharacters = Array.from(copy.findings);
+  const streamedFindingInterval =
+    streamedFindingCharacters.length > 0
+      ? clamp(2_260 / streamedFindingCharacters.length, 18, 34)
+      : 34;
   const streamedFindingCount = Math.min(
     streamedFindingCharacters.length,
-    Math.max(0, Math.floor((roomMs - 2_280) / 34)),
+    Math.max(0, Math.floor((roomMs - 2_280) / streamedFindingInterval)),
   );
   const streamedFindings = streamedFindingCharacters.slice(0, streamedFindingCount).join("");
+  const findingsTypingCompleteAt = 2_280 + streamedFindingCharacters.length * streamedFindingInterval;
   const confirmPrimaryClicking = roomMs > 4_340 && roomMs < 4_700;
   const formalStageStarted = roomMs > 5_020;
-  const activeGhostUserVisible = roomMs > 5_360;
-  const activeGhostAgentVisible = roomMs > 6_120;
-  const activeThanksVisible = roomMs > 8_160;
-  const finishTaskVisible = roomMs > 11_760 && roomMs < 13_180;
-  const finishTaskClicking = roomMs > 12_360 && roomMs < 12_760;
+  const activeGhostUserRevealAt = Math.max(5_360, findingsTypingCompleteAt + 420);
+  const activeGhostAgentRevealAt = Math.max(6_120, activeGhostUserRevealAt + 760);
+  const artifactOneRevealAt = Math.max(6_880, activeGhostAgentRevealAt + 760);
+  const activeThanksRevealAt = Math.max(8_160, artifactOneRevealAt + 1_280);
+  const artifactTwoRevealAt = Math.max(9_280, activeThanksRevealAt + 900);
+  const artifactThreeRevealAt = Math.max(10_980, artifactTwoRevealAt + 1_120);
+  const finishTaskRevealAt = Math.max(11_760, artifactThreeRevealAt + 780);
+  const activeGhostUserVisible = roomMs > activeGhostUserRevealAt;
+  const activeGhostAgentVisible = roomMs > activeGhostAgentRevealAt;
+  const artifactOneVisible = roomMs > artifactOneRevealAt;
+  const activeThanksVisible = roomMs > activeThanksRevealAt;
+  const artifactTwoVisible = roomMs > artifactTwoRevealAt;
+  const artifactThreeVisible = roomMs > artifactThreeRevealAt;
+  const finishTaskVisible = roomMs > finishTaskRevealAt && roomMs < finishTaskRevealAt + 1_420;
+  const finishTaskClicking = roomMs > finishTaskRevealAt + 600 && roomMs < finishTaskRevealAt + 1_000;
   const completeOpacity = 1;
   const commentVisible = completeMs > 3_400;
   const tipVisible = completeMs > 5_100;
@@ -2225,7 +2258,7 @@ export function LandingPage({ locale }: LandingPageProps) {
             <p className="landing-subtitle landing-hero-subtitle text-pretty text-[#666671] dark:text-[#8C8C99]">
               {copy.heroSubtitle}
             </p>
-            <div className="landing-hero-cta-row">
+            <div className="landing-hero-cta-stack">
               <Link href="/early-access?source=landing-hero" locale={locale}>
                 <Button
                   size="lg"
@@ -2234,9 +2267,23 @@ export function LandingPage({ locale }: LandingPageProps) {
                   {copy.apply}
                 </Button>
               </Link>
+              <Link href="/login" locale={locale} className="landing-invite-entry">
+                <span>{locale === "zh" ? "已获邀请" : "Invited"}</span>
+                <span className="landing-invite-entry-arrow" aria-hidden="true">→</span>
+              </Link>
             </div>
           </LandingReveal>
         </div>
+        <a
+          href="#landing-demo"
+          className="landing-scroll-cue"
+          aria-label={copy.scrollHint}
+        >
+          <span className="landing-scroll-cue-icon" aria-hidden="true">
+            <ChevronDown className="h-4 w-4" />
+          </span>
+          <span className="landing-scroll-cue-text">{copy.scrollHint}</span>
+        </a>
       </section>
 
       <main className="landing-main">
@@ -2419,7 +2466,7 @@ export function LandingPage({ locale }: LandingPageProps) {
                 <h2 className="landing-section-title landing-final-title text-balance lg:whitespace-nowrap text-[#18181B] dark:text-[#F4F4F5]">
                   {copy.ctaTitle}
                 </h2>
-                <div className="landing-final-cta-row">
+                <div className="landing-final-cta-stack">
                   <Link href="/early-access?source=landing-final" locale={locale}>
                     <Button
                       size="lg"
@@ -2428,6 +2475,10 @@ export function LandingPage({ locale }: LandingPageProps) {
                       {copy.apply}
                     </Button>
                   </Link>
+              <Link href="/login" locale={locale} className="landing-invite-entry">
+                <span>{locale === "zh" ? "已获邀请" : "Invited"}</span>
+                <span className="landing-invite-entry-arrow" aria-hidden="true">→</span>
+              </Link>
                 </div>
               </div>
             </div>

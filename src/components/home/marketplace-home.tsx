@@ -3,6 +3,10 @@
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { useEffect, useState } from "react";
 
+import {
+  OAUTH_STATE_KEY,
+  persistOAuthPendingState,
+} from "@/lib/auth/oauth-state";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
@@ -23,8 +27,6 @@ type MarketplaceHomePageProps = {
   newAgents: AgentCard[];
   freeAgents: AgentCard[];
 };
-
-const OAUTH_STATE_KEY = "oauth_pending_state";
 
 function getCopy(locale: "en" | "zh") {
   if (locale === "zh") {
@@ -139,21 +141,6 @@ export function MarketplaceHomePage({
     );
   }
 
-  function persistOAuthState() {
-    const payload = {
-      returnUrl: `/${locale}`,
-      context: {
-        draftPrompt: prompt,
-        selectedCategories,
-      },
-      timestamp: Date.now(),
-    };
-
-    const raw = JSON.stringify(payload);
-    window.localStorage.setItem(OAUTH_STATE_KEY, raw);
-    window.sessionStorage.setItem(OAUTH_STATE_KEY, raw);
-  }
-
   async function handleSubmit() {
     setIsSubmitting(true);
     setMessage(null);
@@ -165,7 +152,13 @@ export function MarketplaceHomePage({
       } = await supabase.auth.getSession();
 
       if (!session) {
-        persistOAuthState();
+        persistOAuthPendingState({
+          returnUrl: `/${locale}`,
+          context: {
+            draftPrompt: prompt,
+            selectedCategories,
+          },
+        });
         await supabase.auth.signInWithOAuth({
           provider: "github",
           options: {
